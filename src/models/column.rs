@@ -45,6 +45,10 @@ impl<T> Column<T> {
     pub fn len(&self) -> usize {
         self.data.len()
     }
+
+    pub fn missing_count(&self) -> usize {
+        self.data.iter().filter(|x| x.is_none()).count()
+    }
 }
 
 impl<T> Column<T>
