@@ -33,6 +33,18 @@ impl<T> Column<T> {
             behaviors: HashMap::new(),
         })
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
 }
 
 impl<T> Column<T>
