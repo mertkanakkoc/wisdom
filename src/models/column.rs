@@ -9,9 +9,10 @@ pub enum ColumnError {
     EmptyName,
     NameTooLong { max: usize, actual: usize },
     ParseFailed(Box<dyn std::error::Error>),
+    BehaviorAlreadyRegistered { name: String },
 }
 
-enum BehaviorResult {
+pub enum BehaviorResult {
     Float(f64),
     Int(i64),
     Text(String),
@@ -56,6 +57,28 @@ impl<T> Column<T> {
         I: SliceIndex<[Option<T>]>,
     {
         self.data.get(index)
+    }
+
+    pub fn register_behavior(
+        &mut self,
+        name: &str,
+        f: impl Fn(&Vec<Option<T>>) -> BehaviorResult + 'static,
+    ) -> Result<String, ColumnError> {
+        if self.behaviors.contains_key(name) {
+            return Err(ColumnError::BehaviorAlreadyRegistered {
+                name: name.to_string(),
+            });
+        }
+
+        self.behaviors.insert(name.to_string(), Box::new(f));
+        Ok(format!("Behavior '{}' added", name))
+    }
+
+    pub fn call_behavior(&self, name: &str) -> Option<BehaviorResult> {
+        match self.behaviors.get(name) {
+            Some(behavior) => Some(behavior(&self.data)),
+            None => None,
+        }
     }
 }
 
