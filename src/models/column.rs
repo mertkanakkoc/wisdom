@@ -100,3 +100,94 @@ fn validate_name(name: &str) -> Result<(), ColumnError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn name_returns_the_column_name() {
+        let column = Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        assert_eq!(column.name(), "age")
+    }
+
+    #[test]
+    fn len_returns_number_of_elements() {
+        let column =
+            Column::new_from_parsed(vec![Some(1), Some(2), None], "age".to_string()).unwrap();
+
+        assert_eq!(column.len(), 3)
+    }
+
+    #[test]
+    fn is_empty_returns_true_for_empty_column() {
+        let column: Column<i64> = Column::new_from_parsed(vec![], "age".to_string()).unwrap();
+
+        assert!(column.is_empty())
+    }
+
+    #[test]
+    fn is_empty_returns_false_for_nonempty_column() {
+        let column = Column::new_from_parsed(vec![Some(1)], "age".to_string()).unwrap();
+
+        assert!(!column.is_empty())
+    }
+
+    #[test]
+    fn missing_count_returns_zero() {
+        let column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        assert_eq!(column.missing_count(), 0)
+    }
+
+    #[test]
+    fn missing_count_returns_count() {
+        let column =
+            Column::new_from_parsed(vec![Some(1), None, Some(2)], "age".to_string()).unwrap();
+
+        assert_eq!(column.missing_count(), 1)
+    }
+
+    #[test]
+    fn missing_count_returns_total_when_all_missing() {
+        let column: Column<i64> =
+            Column::new_from_parsed(vec![None, None, None], "age".to_string()).unwrap();
+
+        assert_eq!(column.missing_count(), 3)
+    }
+
+    #[test]
+    fn get_returns_some_some_value() {
+        let column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        assert_eq!(column.get(1), Some(&Some(2)))
+    }
+
+    #[test]
+    fn get_returns_some_none_value() {
+        let column =
+            Column::new_from_parsed(vec![Some(1), None, Some(3)], "age".to_string()).unwrap();
+
+        assert_eq!(column.get(1), Some(&None));
+    }
+
+    #[test]
+    fn get_returns_none_for_out_of_bounds_index() {
+        let column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        assert_eq!(column.get(5), None);
+    }
+
+    #[test]
+    fn get_with_range_returns_slice() {
+        let column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3), Some(4)], "age".to_string())
+                .unwrap();
+
+        assert_eq!(column.get(1..3), Some(&[Some(2), Some(3)][..]))
+    }
+}
