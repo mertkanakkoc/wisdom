@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::slice::SliceIndex;
 
 pub const MAX_NAME_LEN: usize = 200;
 
@@ -48,6 +49,13 @@ impl<T> Column<T> {
 
     pub fn missing_count(&self) -> usize {
         self.data.iter().filter(|x| x.is_none()).count()
+    }
+
+    pub fn get<I>(&self, index: I) -> Option<&<I as SliceIndex<[Option<T>]>>::Output>
+    where
+        I: SliceIndex<[Option<T>]>,
+    {
+        self.data.get(index)
     }
 }
 
