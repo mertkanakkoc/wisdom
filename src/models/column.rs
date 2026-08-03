@@ -10,6 +10,7 @@ pub enum ColumnError {
     NameTooLong { max: usize, actual: usize },
     ParseFailed(Box<dyn std::error::Error>),
     BehaviorAlreadyRegistered { name: String },
+    BehaviorNotFound { name: String },
 }
 
 #[derive(Debug)]
@@ -73,6 +74,30 @@ impl<T> Column<T> {
 
         self.behaviors.insert(name.to_string(), Box::new(f));
         Ok(format!("Behavior '{}' added", name))
+    }
+
+    pub fn update_behavior(
+        &mut self,
+        name: &str,
+        f: impl Fn(&Vec<Option<T>>) -> BehaviorResult + 'static,
+    ) -> Result<String, ColumnError> {
+        if !self.behaviors.contains_key(name) {
+            return Err(ColumnError::BehaviorNotFound {
+                name: name.to_string(),
+            });
+        }
+
+        self.behaviors.insert(name.to_string(), Box::new(f));
+        Ok(format!("Behavior '{}' updated", name))
+    }
+
+    pub fn remove_behavior(&mut self, name: &str) -> Result<String, ColumnError> {
+        match self.behaviors.remove(name) {
+            Some(_) => Ok(format!("Behavior '{}' removed", name)),
+            None => Err(ColumnError::BehaviorNotFound {
+                name: name.to_string(),
+            }),
+        }
     }
 
     pub fn call_behavior(&self, name: &str) -> Option<BehaviorResult> {
