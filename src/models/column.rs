@@ -73,7 +73,7 @@ impl<T> Column<T> {
         }
 
         self.behaviors.insert(name.to_string(), Box::new(f));
-        Ok(format!("Behavior '{}' added", name))
+        Ok(format!("Behavior '{}' added.", name))
     }
 
     pub fn update_behavior(
@@ -88,12 +88,12 @@ impl<T> Column<T> {
         }
 
         self.behaviors.insert(name.to_string(), Box::new(f));
-        Ok(format!("Behavior '{}' updated", name))
+        Ok(format!("Behavior '{}' updated.", name))
     }
 
     pub fn remove_behavior(&mut self, name: &str) -> Result<String, ColumnError> {
         match self.behaviors.remove(name) {
-            Some(_) => Ok(format!("Behavior '{}' removed", name)),
+            Some(_) => Ok(format!("Behavior '{}' removed.", name)),
             None => Err(ColumnError::BehaviorNotFound {
                 name: name.to_string(),
             }),
@@ -251,7 +251,7 @@ mod tests {
         });
 
         match result {
-            Ok(message) => assert_eq!(message, "Behavior 'sum' added"),
+            Ok(message) => assert_eq!(message, "Behavior 'sum' added."),
             Err(_) => panic!("Test paniced!"),
         }
     }
@@ -307,6 +307,86 @@ mod tests {
         match result {
             Some(BehaviorResult::Int(value)) => assert_eq!(value, 3),
             _ => panic!("Unexpected result!"),
+        }
+    }
+
+    #[test]
+    fn update_behavior_succeeds_and_replaces_logic() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        column
+            .register_behavior("sum", |data| {
+                let total: i64 = data.iter().flatten().sum();
+                BehaviorResult::Int(total)
+            })
+            .unwrap();
+
+        let update_result = column.update_behavior("sum", |data| {
+            let count = data.iter().flatten().count() as i64;
+            BehaviorResult::Int(count)
+        });
+
+        match update_result {
+            Ok(message) => assert_eq!(message, "Behavior 'sum' updated."),
+            Err(_) => panic!("Test paniced"),
+        }
+
+        let call_result = column.call_behavior("sum");
+        match call_result {
+            Some(BehaviorResult::Int(value)) => assert_eq!(value, 2),
+            _ => panic!("Unexpected result!"),
+        }
+    }
+
+    #[test]
+    fn update_behavior_fails_when_not_registered() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let result = column.update_behavior("sum", |data| {
+            let total: i64 = data.iter().flatten().sum();
+            BehaviorResult::Int(total)
+        });
+
+        match result {
+            Err(ColumnError::BehaviorNotFound { name }) => assert_eq!(name, "sum".to_string()),
+            _ => panic!("Unexpected result"),
+        }
+    }
+
+    #[test]
+    fn remove_behavior_succeeds_and_behavior_no_longer_callable() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        column
+            .register_behavior("sum", |data| {
+                let total: i64 = data.iter().flatten().sum();
+                BehaviorResult::Int(total)
+            })
+            .unwrap();
+
+        let remove_result = column.remove_behavior("sum");
+
+        match remove_result {
+            Ok(message) => assert_eq!(message, "Behavior 'sum' removed."),
+            Err(_) => panic!("Test paniced!"),
+        }
+
+        let call_result = column.call_behavior("sum");
+        assert!(call_result.is_none())
+    }
+
+    #[test]
+    fn remove_behavior_fails_when_not_registered() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let result = column.remove_behavior("sum");
+        match result {
+            Err(ColumnError::BehaviorNotFound { name }) => assert_eq!(name, "sum".to_string()),
+            _ => panic!("Unexpected result"),
         }
     }
 }
