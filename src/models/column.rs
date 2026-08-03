@@ -12,6 +12,7 @@ pub enum ColumnError {
     BehaviorAlreadyRegistered { name: String },
 }
 
+#[derive(Debug)]
 pub enum BehaviorResult {
     Float(f64),
     Int(i64),
@@ -212,5 +213,75 @@ mod tests {
                 .unwrap();
 
         assert_eq!(column.get(1..3), Some(&[Some(2), Some(3)][..]))
+    }
+
+    #[test]
+    fn register_behavior_succeeds_for_new_name() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let result = column.register_behavior("sum", |data| {
+            let sum: i64 = data.iter().flatten().sum();
+            BehaviorResult::Int(sum)
+        });
+
+        match result {
+            Ok(message) => assert_eq!(message, "Behavior 'sum' added"),
+            Err(_) => panic!("Test paniced!"),
+        }
+    }
+
+    #[test]
+    fn register_behavior_fails_when_name_already_exits() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        column
+            .register_behavior("sum", |data| {
+                let sum: i64 = data.iter().flatten().sum();
+                BehaviorResult::Int(sum)
+            })
+            .unwrap();
+
+        let second_behavior = column.register_behavior("sum", |data| {
+            let sum: i64 = data.iter().flatten().sum();
+            BehaviorResult::Int(sum)
+        });
+
+        match second_behavior {
+            Err(ColumnError::BehaviorAlreadyRegistered { name }) => {
+                assert_eq!(name, "sum");
+            }
+            _ => panic!("Unexpected result"),
+        }
+    }
+
+    #[test]
+    fn call_behavior_returns_none() {
+        let column = Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let behavior = column.call_behavior("sum");
+
+        assert!(behavior.is_none())
+    }
+
+    #[test]
+    fn call_behavior_executes_registered_behavior() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        column
+            .register_behavior("sum", |data| {
+                let total: i64 = data.iter().flatten().sum();
+                BehaviorResult::Int(total)
+            })
+            .unwrap();
+
+        let result = column.call_behavior("sum");
+
+        match result {
+            Some(BehaviorResult::Int(value)) => assert_eq!(value, 3),
+            _ => panic!("Unexpected result!"),
+        }
     }
 }
