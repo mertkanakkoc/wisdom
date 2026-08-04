@@ -42,6 +42,16 @@ impl<T> Column<T> {
         &self.name
     }
 
+    pub fn update_name(&mut self, name: String) -> Result<String, ColumnError> {
+        validate_name(&name)?;
+        let old_name = self.name.clone();
+        self.name = name;
+        Ok(format!(
+            "Name of the column changed from '{}' to '{}'.",
+            old_name, self.name,
+        ))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
@@ -386,6 +396,51 @@ mod tests {
         let result = column.remove_behavior("sum");
         match result {
             Err(ColumnError::BehaviorNotFound { name }) => assert_eq!(name, "sum".to_string()),
+            _ => panic!("Unexpected result"),
+        }
+    }
+
+    #[test]
+    fn update_name_succeeds_with_valid_name() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let result = column.update_name("years".to_string());
+
+        match result {
+            Ok(message) => assert_eq!(message, "Name of the column changed from 'age' to 'years'."),
+            Err(_) => panic!("Test paniced!"),
+        }
+
+        assert_eq!(column.name(), "years".to_string());
+    }
+
+    #[test]
+    fn update_name_fails_with_empty_name() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let result = column.update_name("".to_string());
+        match result {
+            Err(ColumnError::EmptyName) => {}
+            _ => panic!("Unexpected result"),
+        }
+
+        assert_eq!(column.name(), "age");
+    }
+
+    #[test]
+    fn update_name_fails_when_too_long() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let too_long_name = "a".repeat(MAX_NAME_LEN + 1);
+        let result = column.update_name(too_long_name);
+        match result {
+            Err(ColumnError::NameTooLong { max, actual }) => {
+                assert_eq!(max, MAX_NAME_LEN);
+                assert_eq!(actual, MAX_NAME_LEN + 1);
+            }
             _ => panic!("Unexpected result"),
         }
     }
