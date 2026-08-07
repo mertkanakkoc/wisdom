@@ -537,4 +537,104 @@ mod tests {
             _ => panic!("Unexpected result"),
         }
     }
+
+    #[test]
+    fn update_element_succeeds_with_valid_indices() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        let result = column.update_element(vec![(0, Some(10)), (2, Some(30))]);
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(10)));
+        assert_eq!(column.get(1), Some(&Some(2)));
+        assert_eq!(column.get(2), Some(&Some(30)));
+    }
+
+    #[test]
+    fn update_element_can_set_value_to_missing() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        let result = column.update_element(vec![(1, None)]);
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(1), Some(&None));
+    }
+
+    #[test]
+    fn update_element_fails_and_stays_atomic_for_out_of_bounds() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        let result = column.update_element(vec![(0, Some(99)), (10, Some(100))]);
+
+        match result {
+            Err(ColumnError::IndexOutOfBounds { max }) => assert_eq!(max, column.len()),
+            _ => panic!("Unexpected result."),
+        }
+
+        assert_eq!(column.get(0), Some(&Some(1)));
+    }
+
+    #[test]
+    fn update_element_fails_for_duplicate_indices() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        let result = column.update_element(vec![(0, Some(10)), (0, Some(20))]);
+
+        match result {
+            Err(ColumnError::DuplicatedIndices) => {}
+            _ => panic!("Unexpected result."),
+        }
+
+        assert_eq!(column.get(0), Some(&Some(1)));
+    }
+
+    #[test]
+    fn remove_element_succeeds_with_valid_indices() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3), Some(4)], "age".to_string())
+                .unwrap();
+
+        let result = column.remove_element(vec![1, 3]);
+
+        assert!(result.is_ok());
+        assert_eq!(column.len(), 2);
+        assert_eq!(column.get(0), Some(&Some(1)));
+        assert_eq!(column.get(1), Some(&Some(3)));
+    }
+
+    #[test]
+    fn remove_element_fails_and_stays_atomic_for_out_of_bounds() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        let result = column.remove_element(vec![0, 10]);
+
+        match result {
+            Err(ColumnError::IndexOutOfBounds { max }) => assert_eq!(max, column.len()),
+            _ => panic!("Unexpected result."),
+        }
+
+        assert_eq!(column.len(), 3);
+        assert_eq!(column.get(0), Some(&Some(1)));
+    }
+
+    #[test]
+    fn remove_element_fails_for_duplicate_indices() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2), Some(3)], "age".to_string()).unwrap();
+
+        let result = column.remove_element(vec![1, 1]);
+
+        match result {
+            Err(ColumnError::DuplicatedIndices) => {}
+            _ => panic!("Unexpected result."),
+        }
+
+        assert_eq!(column.len(), 3);
+        assert_eq!(column.get(0), Some(&Some(1)));
+    }
 }
