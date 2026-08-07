@@ -3,28 +3,48 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::slice::SliceIndex;
 
+/// Maximum number of characters allowed in a [`Column`]'s name.
 pub const MAX_NAME_LEN: usize = 200;
 
+/// Errors that can occur while creating or mutating a [`Column`].
 #[derive(Debug)]
 pub enum ColumnError {
+    /// The provided column name was empty.
     EmptyName,
+    /// The provided column name exceeded [`MAX_NAME_LEN`] characters.
     NameTooLong { max: usize, actual: usize },
+    /// A raw cell value could not be parsed into the column's target type `T`.
     ParseFailed(Box<dyn std::error::Error>),
+    /// [`Column::register_behavior`] was called with a name that is already registered.
     BehaviorAlreadyRegistered { name: String },
+    /// A behavior lookup/update/removal was attempted for a name that isn't registered.
     BehaviorNotFound { name: String },
+    /// One or more indices passed to [`Column::update_element`] or [`Column::remove_element`]
+    /// were outside the bounds of the column's data (`max` is the column's current length).
     IndexOutOfBounds { max: usize },
+    /// The same index appeared more than once in a call to [`Column::update_element`] or
+    /// [`Column::remove_element`].
     DuplicatedIndices,
 }
 
+/// The result of calling a registered behavior via [`Column::call_behavior`].
+///
+/// Common numeric/text/boolean results have dedicated variants; `Custom` is an escape hatch
+/// for any other type, recovered at the call site via `downcast_ref`/`downcast`.
 #[derive(Debug)]
 pub enum BehaviorResult {
     Float(f64),
     Int(i64),
     Text(String),
     Bool(bool),
+    /// Any type not covered by the other variants, type-erased behind [`std::any::Any`].
     Custom(Box<dyn Any>),
 }
 
+/// A single typed column of data, storing each cell as `Option<T>` to represent missing values.
+///
+/// A `Column` also carries its own name and a registry of named "behaviors" (closures) that
+/// can be run against its data on demand via [`Column::call_behavior`].
 pub struct Column<T> {
     data: Vec<Option<T>>,
     name: String,
@@ -32,6 +52,13 @@ pub struct Column<T> {
 }
 
 impl<T> Column<T> {
+    /// Creates a new `Column` from already-typed data.
+    ///
+    /// Each element is `Option<T>`, so the caller decides directly which cells are missing.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::EmptyName`] or [`ColumnError::NameTooLong`] if `name` fails
+    /// validation.
     pub fn new_from_parsed(data: Vec<Option<T>>, name: String) -> Result<Self, ColumnError> {
         validate_name(&name)?;
         Ok(Self {
@@ -41,10 +68,16 @@ impl<T> Column<T> {
         })
     }
 
+    /// Returns the column's name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Renames the column.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::EmptyName`] or [`ColumnError::NameTooLong`] if `name` fails
+    /// validation; on failure the column's existing name is left untouched.
     pub fn update_name(&mut self, name: String) -> Result<String, ColumnError> {
         validate_name(&name)?;
         let old_name = self.name.clone();
@@ -55,18 +88,28 @@ impl<T> Column<T> {
         ))
     }
 
+    /// Returns `true` if the column has no elements at all (not the same as "no missing
+    /// values").
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 
+    /// Returns the total number of elements in the column, including missing (`None`) ones.
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
+    /// Returns how many elements in the column are missing (`None`).
     pub fn missing_count(&self) -> usize {
         self.data.iter().filter(|x| x.is_none()).count()
     }
 
+    /// Accesses an element (or a slice of elements) by index or range, mirroring
+    /// [`slice::get`]'s behavior.
+    ///
+    /// Because each stored element is itself an `Option<T>`, a single-index call returns
+    /// `Option<&Option<T>>`: the outer `Option` is `None` for an out-of-bounds index, while
+    /// the inner `Option` is `None` for a missing value at a valid index.
     pub fn get<I>(&self, index: I) -> Option<&<I as SliceIndex<[Option<T>]>>::Output>
     where
         I: SliceIndex<[Option<T>]>,
@@ -74,6 +117,14 @@ impl<T> Column<T> {
         self.data.get(index)
     }
 
+    /// Replaces the elements at the given `(index, value)` pairs.
+    ///
+    /// A `value` of `None` sets that cell to missing. The update is atomic: if any index is
+    /// out of bounds or repeated, no changes are applied at all.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::IndexOutOfBounds`] if any index is out of range, or
+    /// [`ColumnError::DuplicatedIndices`] if the same index appears more than once.
     pub fn update_element(
         &mut self,
         new_elements: Vec<(usize, Option<T>)>,
@@ -94,6 +145,14 @@ impl<T> Column<T> {
         Ok(format!("Elements are changed."))
     }
 
+    /// Removes the elements at the given indices, shifting the remaining elements down.
+    ///
+    /// The removal is atomic: if any index is out of bounds or repeated, no changes are
+    /// applied at all.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::IndexOutOfBounds`] if any index is out of range, or
+    /// [`ColumnError::DuplicatedIndices`] if the same index appears more than once.
     pub fn remove_element(&mut self, mut indices: Vec<usize>) -> Result<String, ColumnError> {
         if !check_duplicate_indices(&indices) {
             return Err(ColumnError::DuplicatedIndices);
@@ -122,6 +181,12 @@ impl<T> Column<T> {
         Ok(format!("Elements removed from the column '{}'", self.name))
     }
 
+    /// Registers a new named behavior: a closure that computes a [`BehaviorResult`] from the
+    /// column's data, to be run later via [`Column::call_behavior`].
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::BehaviorAlreadyRegistered`] if `name` is already registered; use
+    /// [`Column::update_behavior`] to replace an existing one instead.
     pub fn register_behavior(
         &mut self,
         name: &str,
@@ -137,6 +202,11 @@ impl<T> Column<T> {
         Ok(format!("Behavior '{}' added.", name))
     }
 
+    /// Replaces the closure registered under `name` with a new one.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::BehaviorNotFound`] if `name` isn't already registered; use
+    /// [`Column::register_behavior`] to add a new one instead.
     pub fn update_behavior(
         &mut self,
         name: &str,
@@ -152,6 +222,10 @@ impl<T> Column<T> {
         Ok(format!("Behavior '{}' updated.", name))
     }
 
+    /// Removes the behavior registered under `name`.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::BehaviorNotFound`] if `name` isn't registered.
     pub fn remove_behavior(&mut self, name: &str) -> Result<String, ColumnError> {
         match self.behaviors.remove(name) {
             Some(_) => Ok(format!("Behavior '{}' removed.", name)),
@@ -161,6 +235,8 @@ impl<T> Column<T> {
         }
     }
 
+    /// Runs the behavior registered under `name` against the column's data and returns its
+    /// result, or `None` if no behavior is registered under that name.
     pub fn call_behavior(&self, name: &str) -> Option<BehaviorResult> {
         match self.behaviors.get(name) {
             Some(behavior) => Some(behavior(&self.data)),
@@ -174,6 +250,12 @@ where
     T: std::str::FromStr,
     T::Err: std::error::Error + 'static,
 {
+    /// Creates a new `Column` from raw, unparsed string cells, parsing each present cell into
+    /// `T` via [`std::str::FromStr`].
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::EmptyName`]/[`ColumnError::NameTooLong`] if `name` fails
+    /// validation, or [`ColumnError::ParseFailed`] if any cell can't be parsed into `T`.
     pub fn new_from_raw(raw: Vec<Option<String>>, name: String) -> Result<Self, ColumnError> {
         validate_name(&name)?;
 
