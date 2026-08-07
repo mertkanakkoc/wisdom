@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::format;
 use std::slice::SliceIndex;
 
 pub const MAX_NAME_LEN: usize = 200;
@@ -13,7 +14,7 @@ pub enum ColumnError {
     BehaviorAlreadyRegistered { name: String },
     BehaviorNotFound { name: String },
     IndexOutOfBounds { max: usize },
-    DuplicatedIndexes,
+    DuplicatedIndices,
 }
 
 #[derive(Debug)]
@@ -83,8 +84,8 @@ impl<T> Column<T> {
                 max: self.data.len(),
             });
         }
-        if !check_duplicate_indexes(&new_elements) {
-            return Err(ColumnError::DuplicatedIndexes);
+        if !check_duplicate_indices(&new_elements) {
+            return Err(ColumnError::DuplicatedIndices);
         }
 
         for (index, element) in new_elements {
@@ -92,6 +93,34 @@ impl<T> Column<T> {
         }
 
         Ok(format!("Elements are changed."))
+    }
+
+    pub fn remove_element(&mut self, mut indices: Vec<usize>) -> Result<String, ColumnError> {
+        if !check_duplicate_indices(&indices) {
+            return Err(ColumnError::DuplicatedIndices);
+        }
+
+        let max_data_len = self.data.len();
+        if !check_len_limit(&indices, max_data_len) {
+            return Err(ColumnError::IndexOutOfBounds { max: max_data_len });
+        }
+
+        indices.sort_unstable();
+
+        let mut remove_idx = 0;
+        let mut i = 0;
+        self.data.retain(|_| {
+            let keep = if remove_idx < indices.len() && indices[remove_idx] == i {
+                remove_idx += 1;
+                false
+            } else {
+                true
+            };
+            i += 1;
+            keep
+        });
+
+        Ok(format!("Elements removed from the column '{}'", self.name))
     }
 
     pub fn register_behavior(
@@ -183,17 +212,46 @@ fn validate_name(name: &str) -> Result<(), ColumnError> {
     Ok(())
 }
 
-fn check_duplicate_indexes<T>(index_element_pairs: &[(usize, Option<T>)]) -> bool {
-    let mut seen: HashSet<usize> = HashSet::with_capacity(index_element_pairs.len());
-    index_element_pairs
-        .iter()
-        .all(|(index, _)| seen.insert(*index))
+trait Duplicates {
+    fn check_duplicate(&self) -> bool;
 }
 
-fn check_len_limit<T>(index_element_pairs: &[(usize, Option<T>)], column_len: usize) -> bool {
-    index_element_pairs
-        .iter()
-        .all(|(index, _)| *index < column_len)
+impl Duplicates for &Vec<usize> {
+    fn check_duplicate(&self) -> bool {
+        let mut seen: HashSet<usize> = HashSet::with_capacity(self.len());
+        self.iter().all(|index| seen.insert(*index))
+    }
+}
+
+impl<T> Duplicates for &Vec<(usize, Option<T>)> {
+    fn check_duplicate(&self) -> bool {
+        let mut seen: HashSet<usize> = HashSet::with_capacity(self.len());
+        self.iter().all(|(index, _)| seen.insert(*index))
+    }
+}
+
+fn check_duplicate_indices<T: Duplicates>(index_element_pairs: T) -> bool {
+    index_element_pairs.check_duplicate()
+}
+
+trait Limits {
+    fn check_limits(&self, column_len: usize) -> bool;
+}
+
+impl Limits for &Vec<usize> {
+    fn check_limits(&self, column_len: usize) -> bool {
+        self.iter().all(|index| *index < column_len)
+    }
+}
+
+impl<T> Limits for &Vec<(usize, Option<T>)> {
+    fn check_limits(&self, column_len: usize) -> bool {
+        self.iter().all(|(index, _)| *index < column_len)
+    }
+}
+
+fn check_len_limit<T: Limits>(index_element_pairs: T, column_len: usize) -> bool {
+    index_element_pairs.check_limits(column_len)
 }
 
 #[cfg(test)]
