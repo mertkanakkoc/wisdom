@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::slice::SliceIndex;
 
 pub const MAX_NAME_LEN: usize = 200;
@@ -11,6 +12,8 @@ pub enum ColumnError {
     ParseFailed(Box<dyn std::error::Error>),
     BehaviorAlreadyRegistered { name: String },
     BehaviorNotFound { name: String },
+    IndexOutOfBounds { max: usize },
+    DuplicatedIndexes,
 }
 
 #[derive(Debug)]
@@ -69,6 +72,26 @@ impl<T> Column<T> {
         I: SliceIndex<[Option<T>]>,
     {
         self.data.get(index)
+    }
+
+    pub fn update_element(
+        &mut self,
+        new_elements: Vec<(usize, Option<T>)>,
+    ) -> Result<String, ColumnError> {
+        if !check_len_limit(&new_elements, self.data.len()) {
+            return Err(ColumnError::IndexOutOfBounds {
+                max: self.data.len(),
+            });
+        }
+        if !check_duplicate_indexes(&new_elements) {
+            return Err(ColumnError::DuplicatedIndexes);
+        }
+
+        for (index, element) in new_elements {
+            self.data[index] = element;
+        }
+
+        Ok(format!("Elements are changed."))
     }
 
     pub fn register_behavior(
@@ -158,6 +181,19 @@ fn validate_name(name: &str) -> Result<(), ColumnError> {
         });
     }
     Ok(())
+}
+
+fn check_duplicate_indexes<T>(index_element_pairs: &[(usize, Option<T>)]) -> bool {
+    let mut seen: HashSet<usize> = HashSet::with_capacity(index_element_pairs.len());
+    index_element_pairs
+        .iter()
+        .all(|(index, _)| seen.insert(*index))
+}
+
+fn check_len_limit<T>(index_element_pairs: &[(usize, Option<T>)], column_len: usize) -> bool {
+    index_element_pairs
+        .iter()
+        .all(|(index, _)| *index < column_len)
 }
 
 #[cfg(test)]
