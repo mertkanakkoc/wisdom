@@ -215,21 +215,21 @@ trait Duplicates {
     fn check_duplicate(&self) -> bool;
 }
 
-impl Duplicates for &Vec<usize> {
+impl Duplicates for Vec<usize> {
     fn check_duplicate(&self) -> bool {
         let mut seen: HashSet<usize> = HashSet::with_capacity(self.len());
         self.iter().all(|index| seen.insert(*index))
     }
 }
 
-impl<T> Duplicates for &Vec<(usize, Option<T>)> {
+impl<T> Duplicates for Vec<(usize, Option<T>)> {
     fn check_duplicate(&self) -> bool {
         let mut seen: HashSet<usize> = HashSet::with_capacity(self.len());
         self.iter().all(|(index, _)| seen.insert(*index))
     }
 }
 
-fn check_duplicate_indices<T: Duplicates>(index_element_pairs: T) -> bool {
+fn check_duplicate_indices<T: Duplicates>(index_element_pairs: &T) -> bool {
     index_element_pairs.check_duplicate()
 }
 
@@ -237,19 +237,19 @@ trait Limits {
     fn check_limits(&self, column_len: usize) -> bool;
 }
 
-impl Limits for &Vec<usize> {
+impl Limits for Vec<usize> {
     fn check_limits(&self, column_len: usize) -> bool {
         self.iter().all(|index| *index < column_len)
     }
 }
 
-impl<T> Limits for &Vec<(usize, Option<T>)> {
+impl<T> Limits for Vec<(usize, Option<T>)> {
     fn check_limits(&self, column_len: usize) -> bool {
         self.iter().all(|(index, _)| *index < column_len)
     }
 }
 
-fn check_len_limit<T: Limits>(index_element_pairs: T, column_len: usize) -> bool {
+fn check_len_limit<T: Limits>(index_element_pairs: &T, column_len: usize) -> bool {
     index_element_pairs.check_limits(column_len)
 }
 
