@@ -64,6 +64,10 @@ impl Table {
             data: data,
         })
     }
+
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
+    }
 }
 
 #[cfg(test)]
