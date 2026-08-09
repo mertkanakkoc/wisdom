@@ -129,4 +129,13 @@ mod tests {
             _ => panic!("Unexpected result"),
         }
     }
+
+    #[test]
+    fn file_path_returns_source_path() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+
+        let table = Table::from_csv(file.path()).unwrap();
+
+        assert_eq!(table.file_path(), file.path())
+    }
 }
