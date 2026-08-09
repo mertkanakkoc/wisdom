@@ -176,4 +176,13 @@ mod tests {
 
         assert_eq!(table.row_count(), 0);
     }
+
+    #[test]
+    fn column_count_returns_number_of_columns() {
+        let file = write_temp_csv("age,name,city\n25,Ali,Istanbul\n");
+
+        let table = Table::from_csv(file.path()).unwrap();
+
+        assert_eq!(table.column_count(), 3);
+    }
 }
