@@ -84,6 +84,10 @@ impl Table {
     pub fn row_count(&self) -> usize {
         self.data.values().next().map(|c| c.len()).unwrap_or(0)
     }
+
+    pub fn column_count(&self) -> usize {
+        self.data.len()
+    }
 }
 
 #[cfg(test)]
