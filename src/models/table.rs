@@ -154,4 +154,22 @@ mod tests {
 
         assert_eq!(table.file_path(), file.path())
     }
+
+    #[test]
+    fn row_count_returns_number_of_rows() {
+        let file = write_temp_csv("age,name\n25,Ali\n30,Ayşe\n40,Mehmet\n");
+
+        let table = Table::from_csv(file.path()).unwrap();
+
+        assert_eq!(table.row_count(), 3);
+    }
+
+    #[test]
+    fn row_count_returns_zero_when_no_data_rows() {
+        let file = write_temp_csv("age,name\n");
+
+        let table = Table::from_csv(file.path()).unwrap();
+
+        assert_eq!(table.row_count(), 0);
+    }
 }
