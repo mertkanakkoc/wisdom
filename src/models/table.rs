@@ -3,13 +3,22 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::models::column::Column;
+use crate::models::column::{Column, ColumnError};
+
+pub enum ColumnState {
+    Available,
+    CheckedOut,
+}
 
 #[derive(Debug)]
 pub enum TableError {
     OpenFileError(csv::Error),
     HeadersReadingError(csv::Error),
     RowReadingError(csv::Error),
+    ColumnNotAvailable { name: String },
+    ColumnNotFound { name: String },
+    ParseFailed { name: String, source: ColumnError },
+    TypeMismatch { name: String },
 }
 
 pub enum ColumnData {
@@ -35,6 +44,7 @@ impl ColumnData {
 pub struct Table {
     file_path: PathBuf,
     data: HashMap<String, ColumnData>,
+    checkouts: HashMap<String, ColumnState>,
 }
 
 impl Table {
@@ -53,6 +63,13 @@ impl Table {
             .map_err(TableError::HeadersReadingError)?
             .iter()
             .map(|h| (h.to_string(), ColumnData::Raw(Vec::new())))
+            .collect();
+
+        let checkouts: HashMap<String, ColumnState> = rdr
+            .headers()
+            .map_err(TableError::HeadersReadingError)?
+            .iter()
+            .map(|h| (h.to_string(), ColumnState::Available))
             .collect();
 
         for result in rdr.records() {
@@ -74,6 +91,7 @@ impl Table {
         Ok(Self {
             file_path: path.to_path_buf(),
             data: data,
+            checkouts: checkouts,
         })
     }
 
@@ -92,22 +110,73 @@ impl Table {
     pub fn element_count(&self) -> usize {
         self.column_count() * self.row_count()
     }
+
+    pub fn get_column<T>(&mut self, name: &str) -> Result<Column<T>, TableError>
+    where
+        T: ColumnDataVariant + std::str::FromStr,
+        T::Err: std::error::Error + 'static,
+    {
+        if let Some(checkout) = self.checkouts.get(name) {
+            match checkout {
+                ColumnState::Available => {}
+                ColumnState::CheckedOut => {
+                    return Err(TableError::ColumnNotAvailable {
+                        name: name.to_string(),
+                    });
+                }
+            }
+        } else {
+            return Err(TableError::ColumnNotFound {
+                name: name.to_string(),
+            });
+        }
+
+        let column_from_data =
+            self.data
+                .remove(name)
+                .ok_or_else(|| TableError::ColumnNotFound {
+                    name: name.to_string(),
+                })?;
+
+        let column = match column_from_data {
+            ColumnData::Raw(value) => {
+                let value_backup = value.clone();
+                Column::new_from_raw(value, name.to_string()).map_err(|e| {
+                    self.data
+                        .insert(name.to_string(), ColumnData::Raw(value_backup));
+                    TableError::ParseFailed {
+                        name: name.to_string(),
+                        source: e,
+                    }
+                })?
+            }
+            other => T::unwrap(other).map_err(|returned_data| {
+                self.data.insert(name.to_string(), returned_data);
+                TableError::TypeMismatch {
+                    name: name.to_string(),
+                }
+            })?,
+        };
+        self.checkouts
+            .insert(name.to_string(), ColumnState::CheckedOut);
+        Ok(column)
+    }
 }
 
-trait ColumnDataVariant: Sized {
+pub trait ColumnDataVariant: Sized {
     fn wrap(column: Column<Self>) -> ColumnData;
-    fn unwrap(data: &ColumnData) -> Option<&Column<Self>>;
+    fn unwrap(data: ColumnData) -> Result<Column<Self>, ColumnData>;
 }
 
 impl ColumnDataVariant for i64 {
     fn wrap(column: Column<i64>) -> ColumnData {
         ColumnData::Int(column)
     }
-    fn unwrap(data: &ColumnData) -> Option<&Column<i64>> {
+    fn unwrap(data: ColumnData) -> Result<Column<i64>, ColumnData> {
         if let ColumnData::Int(c) = data {
-            Some(c)
+            Ok(c)
         } else {
-            None
+            Err(data)
         }
     }
 }
@@ -116,11 +185,11 @@ impl ColumnDataVariant for f64 {
     fn wrap(column: Column<f64>) -> ColumnData {
         ColumnData::Float(column)
     }
-    fn unwrap(data: &ColumnData) -> Option<&Column<f64>> {
+    fn unwrap(data: ColumnData) -> Result<Column<f64>, ColumnData> {
         if let ColumnData::Float(c) = data {
-            Some(c)
+            Ok(c)
         } else {
-            None
+            Err(data)
         }
     }
 }
@@ -129,11 +198,11 @@ impl ColumnDataVariant for String {
     fn wrap(column: Column<String>) -> ColumnData {
         ColumnData::Text(column)
     }
-    fn unwrap(data: &ColumnData) -> Option<&Column<String>> {
+    fn unwrap(data: ColumnData) -> Result<Column<String>, ColumnData> {
         if let ColumnData::Text(c) = data {
-            Some(c)
+            Ok(c)
         } else {
-            None
+            Err(data)
         }
     }
 }
@@ -142,11 +211,11 @@ impl ColumnDataVariant for bool {
     fn wrap(column: Column<bool>) -> ColumnData {
         ColumnData::Bool(column)
     }
-    fn unwrap(data: &ColumnData) -> Option<&Column<bool>> {
+    fn unwrap(data: ColumnData) -> Result<Column<bool>, ColumnData> {
         if let ColumnData::Bool(c) = data {
-            Some(c)
+            Ok(c)
         } else {
-            None
+            Err(data)
         }
     }
 }
