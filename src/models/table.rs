@@ -88,6 +88,10 @@ impl Table {
     pub fn column_count(&self) -> usize {
         self.data.len()
     }
+
+    pub fn element_count(&self) -> usize {
+        self.column_count() * self.row_count()
+    }
 }
 
 #[cfg(test)]
@@ -184,5 +188,14 @@ mod tests {
         let table = Table::from_csv(file.path()).unwrap();
 
         assert_eq!(table.column_count(), 3);
+    }
+
+    #[test]
+    fn element_count_returns_total_elements() {
+        let file = write_temp_csv("age,name\n25,Ali\n30,Ayşe\n40,Mehmet\n");
+
+        let table = Table::from_csv(file.path()).unwrap();
+
+        assert_eq!(table.element_count(), 6);
     }
 }
