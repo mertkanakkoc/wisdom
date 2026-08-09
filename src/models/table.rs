@@ -94,6 +94,63 @@ impl Table {
     }
 }
 
+trait ColumnDataVariant: Sized {
+    fn wrap(column: Column<Self>) -> ColumnData;
+    fn unwrap(data: &ColumnData) -> Option<&Column<Self>>;
+}
+
+impl ColumnDataVariant for i64 {
+    fn wrap(column: Column<i64>) -> ColumnData {
+        ColumnData::Int(column)
+    }
+    fn unwrap(data: &ColumnData) -> Option<&Column<i64>> {
+        if let ColumnData::Int(c) = data {
+            Some(c)
+        } else {
+            None
+        }
+    }
+}
+
+impl ColumnDataVariant for f64 {
+    fn wrap(column: Column<f64>) -> ColumnData {
+        ColumnData::Float(column)
+    }
+    fn unwrap(data: &ColumnData) -> Option<&Column<f64>> {
+        if let ColumnData::Float(c) = data {
+            Some(c)
+        } else {
+            None
+        }
+    }
+}
+
+impl ColumnDataVariant for String {
+    fn wrap(column: Column<String>) -> ColumnData {
+        ColumnData::Text(column)
+    }
+    fn unwrap(data: &ColumnData) -> Option<&Column<String>> {
+        if let ColumnData::Text(c) = data {
+            Some(c)
+        } else {
+            None
+        }
+    }
+}
+
+impl ColumnDataVariant for bool {
+    fn wrap(column: Column<bool>) -> ColumnData {
+        ColumnData::Bool(column)
+    }
+    fn unwrap(data: &ColumnData) -> Option<&Column<bool>> {
+        if let ColumnData::Bool(c) = data {
+            Some(c)
+        } else {
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
