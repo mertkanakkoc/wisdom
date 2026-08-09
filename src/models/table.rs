@@ -20,6 +20,18 @@ pub enum ColumnData {
     Raw(Vec<Option<String>>),
 }
 
+impl ColumnData {
+    pub fn len(&self) -> usize {
+        match self {
+            ColumnData::Int(c) => c.len(),
+            ColumnData::Text(c) => c.len(),
+            ColumnData::Bool(c) => c.len(),
+            ColumnData::Float(c) => c.len(),
+            ColumnData::Raw(v) => v.len(),
+        }
+    }
+}
+
 pub struct Table {
     file_path: PathBuf,
     data: HashMap<String, ColumnData>,
@@ -67,6 +79,10 @@ impl Table {
 
     pub fn file_path(&self) -> &Path {
         &self.file_path
+    }
+
+    pub fn row_count(&self) -> usize {
+        self.data.values().next().map(|c| c.len()).unwrap_or(0)
     }
 }
 
