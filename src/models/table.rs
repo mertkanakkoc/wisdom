@@ -390,7 +390,7 @@ mod tests {
         let result = table.get_column::<i64>("age");
 
         match result {
-            Err(TableError::ParseFailed { name, source }) => assert_eq!(name, "age".to_string()),
+            Err(TableError::ParseFailed { name, source: _ }) => assert_eq!(name, "age".to_string()),
             _ => panic!("Unexpected result."),
         }
 
