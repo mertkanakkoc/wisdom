@@ -436,4 +436,73 @@ mod tests {
             _ => panic!("Unexpected result."),
         }
     }
+
+    #[test]
+    fn update_column_succeeds_after_checkout() {
+        let file = write_temp_csv("age,name\n25,Ali\n30,Ayşe\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = table.get_column::<i64>("age").unwrap();
+        let result = table.update_column("age", column);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn update_column_fails_when_not_checked_out() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = Column::new_from_parsed(vec![Some(25)], "age".to_string()).unwrap();
+        let result = table.update_column("age", column);
+
+        match result {
+            Err(TableError::ColumnNotCheckedOut { name }) => assert_eq!(name, "age".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn update_column_fails_when_column_not_found() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = Column::new_from_parsed(vec![Some(1)], "city".to_string()).unwrap();
+        let result = table.update_column("city", column);
+
+        match result {
+            Err(TableError::ColumnNotFound { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn update_column_fails_when_length_mismatches() {
+        let file = write_temp_csv("age,name\n25,Ali\n30,Ayşe\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let _checked_out = table.get_column::<i64>("age").unwrap();
+        let wrong_length_column =
+            Column::new_from_parsed(vec![Some(1)], "age".to_string()).unwrap();
+
+        let result = table.update_column("age", wrong_length_column);
+
+        match result {
+            Err(TableError::ColumnLengthMismatch { length }) => assert_eq!(length, 2),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn update_column_allows_get_column_again() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = table.get_column::<i64>("age").unwrap();
+        table.update_column("age", column).unwrap();
+
+        let result = table.get_column::<i64>("age");
+
+        assert!(result.is_ok());
+    }
 }
