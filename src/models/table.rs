@@ -324,4 +324,79 @@ mod tests {
 
         assert_eq!(table.element_count(), 6);
     }
+
+    #[test]
+    fn get_column_materializes_raw_column() {
+        let file = write_temp_csv("age,name\n25,Ali\n30,Ayşe\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = table.get_column::<i64>("age").unwrap();
+
+        assert_eq!(column.get(0), Some(&Some(25)));
+        assert_eq!(column.get(1), Some(&Some(30)));
+    }
+
+    #[test]
+    fn get_column_fails_when_already_checked_out() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let _column = table.get_column::<i64>("age").unwrap();
+        let result = table.get_column::<i64>("age");
+
+        match result {
+            Err(TableError::ColumnNotAvailable { name }) => assert_eq!(name, "age".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn get_column_fails_when_column_not_found() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let result = table.get_column::<i64>("city");
+
+        match result {
+            Err(TableError::ColumnNotFound { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn get_column_fails_with_type_mismatch() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = Column::new_from_parsed(vec![Some(25)], "age".to_string()).unwrap();
+        table
+            .data
+            .insert("age".to_string(), ColumnData::Int(column));
+
+        let result = table.get_column::<f64>("age");
+        match result {
+            Err(TableError::TypeMismatch { name }) => assert_eq!(name, "age".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+
+        assert!(table.data.contains_key("age"))
+    }
+
+    #[test]
+    fn get_column_restores_raw_data_on_parse_failure() {
+        let file = write_temp_csv("age,name\nabc,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let result = table.get_column::<i64>("age");
+
+        match result {
+            Err(TableError::ParseFailed { name, source }) => assert_eq!(name, "age".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+
+        match table.data.get("age") {
+            Some(ColumnData::Raw(values)) => assert_eq!(*values, vec![Some("abc".to_string())]),
+            _ => panic!("Unexpected result."),
+        }
+    }
 }
