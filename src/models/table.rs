@@ -22,6 +22,7 @@ pub enum TableError {
     ColumnLengthMismatch { length: usize },
     ColumnNotCheckedOut { name: String },
     ColumnNotUpdated { name: String },
+    ColumnAlreadyExists { name: String },
 }
 
 pub enum ColumnData {
@@ -173,9 +174,7 @@ impl Table {
         let updated_column_len = column.len();
         let row_count = self.row_count();
         if row_count != 0 && row_count != updated_column_len {
-            return Err(TableError::ColumnLengthMismatch {
-                length: self.row_count(),
-            });
+            return Err(TableError::ColumnLengthMismatch { length: row_count });
         }
 
         match self.checkouts.get(name) {
@@ -197,6 +196,30 @@ impl Table {
                 Ok(format!("Column '{}' updated.", name.to_string()))
             }
         }
+    }
+
+    pub fn add_column<T>(&mut self, column: Column<T>) -> Result<String, TableError>
+    where
+        T: ColumnDataVariant + std::str::FromStr,
+        T::Err: std::error::Error + 'static,
+    {
+        let new_column_name = column.name().to_string();
+        if self.data.contains_key(&new_column_name) {
+            return Err(TableError::ColumnAlreadyExists {
+                name: new_column_name,
+            });
+        }
+
+        let row_count = self.row_count();
+        if row_count != 0 && row_count != column.len() {
+            return Err(TableError::ColumnLengthMismatch { length: row_count });
+        }
+
+        let column_for_table = T::wrap(column);
+        self.data.insert(new_column_name.clone(), column_for_table);
+        self.checkouts
+            .insert(new_column_name.clone(), ColumnState::Available);
+        Ok(format!("Column '{}' added.", new_column_name))
     }
 }
 
