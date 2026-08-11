@@ -19,6 +19,9 @@ pub enum TableError {
     ColumnNotFound { name: String },
     ParseFailed { name: String, source: ColumnError },
     TypeMismatch { name: String },
+    ColumnLengthMismatch { length: usize },
+    ColumnNotCheckedOut { name: String },
+    ColumnNotUpdated { name: String },
 }
 
 pub enum ColumnData {
@@ -160,6 +163,40 @@ impl Table {
         self.checkouts
             .insert(name.to_string(), ColumnState::CheckedOut);
         Ok(column)
+    }
+
+    pub fn update_column<T>(&mut self, name: &str, column: Column<T>) -> Result<String, TableError>
+    where
+        T: ColumnDataVariant + std::str::FromStr,
+        T::Err: std::error::Error + 'static,
+    {
+        let updated_column_len = column.len();
+        let row_count = self.row_count();
+        if row_count != 0 && row_count != updated_column_len {
+            return Err(TableError::ColumnLengthMismatch {
+                length: self.row_count(),
+            });
+        }
+
+        match self.checkouts.get(name) {
+            Some(ColumnState::Available) => {
+                return Err(TableError::ColumnNotCheckedOut {
+                    name: name.to_string(),
+                });
+            }
+            None => {
+                return Err(TableError::ColumnNotFound {
+                    name: name.to_string(),
+                });
+            }
+            Some(ColumnState::CheckedOut) => {
+                let column_for_table = T::wrap(column);
+                self.data.insert(name.to_string(), column_for_table);
+                self.checkouts
+                    .insert(name.to_string(), ColumnState::Available);
+                Ok(format!("Column '{}' updated.", name.to_string()))
+            }
+        }
     }
 }
 
