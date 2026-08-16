@@ -5,26 +5,47 @@ use std::{
 
 use crate::models::column::{Column, ColumnError};
 
+/// Whether a column currently lives inside [`Table`] (`Available`) or has been moved out to a
+/// caller via [`Table::get_column`] and not yet returned (`CheckedOut`).
 pub enum ColumnState {
     Available,
     CheckedOut,
 }
 
+/// Errors that can occur while reading or mutating a [`Table`].
 #[derive(Debug)]
 pub enum TableError {
+    /// The CSV file at the given path could not be opened.
     OpenFileError(csv::Error),
+    /// The CSV file's header row could not be read.
     HeadersReadingError(csv::Error),
+    /// A data row could not be read (e.g. malformed CSV).
     RowReadingError(csv::Error),
+    /// [`Table::get_column`] was called on a column that is already checked out.
     ColumnNotAvailable { name: String },
+    /// The requested column name doesn't exist in the table.
     ColumnNotFound { name: String },
+    /// A `Raw` column's cells could not be parsed into the requested type `T`.
     ParseFailed { name: String, source: ColumnError },
+    /// The column exists but is already materialized as a different concrete type than the
+    /// one requested.
     TypeMismatch { name: String },
+    /// The column being added/written back doesn't have the same length as the table's other
+    /// columns.
     ColumnLengthMismatch { length: usize },
+    /// [`Table::update_column`] was called on a column that was never checked out via
+    /// [`Table::get_column`].
     ColumnNotCheckedOut { name: String },
     ColumnNotUpdated { name: String },
+    /// [`Table::add_column`] was called with a name that already exists in the table.
     ColumnAlreadyExists { name: String },
 }
 
+/// A single column's storage inside [`Table`], type-erased so columns of different concrete
+/// types can live in the same `HashMap`.
+///
+/// Columns start as `Raw` (unparsed CSV strings) and get materialized into a typed variant the
+/// first time [`Table::get_column`] is called for them.
 pub enum ColumnData {
     Int(Column<i64>),
     Float(Column<f64>),
@@ -34,6 +55,7 @@ pub enum ColumnData {
 }
 
 impl ColumnData {
+    /// Returns the number of elements in this column, regardless of which variant it is.
     pub fn len(&self) -> usize {
         match self {
             ColumnData::Int(c) => c.len(),
@@ -45,6 +67,12 @@ impl ColumnData {
     }
 }
 
+/// An in-memory, CSV-backed table: a named collection of equal-length columns.
+///
+/// Columns are read lazily — `Table` holds raw string data until a column is requested with a
+/// concrete type via [`Table::get_column`], at which point it's parsed and the result is cached
+/// in place. Table uses a checkout model instead of cloning: [`Table::get_column`] moves a
+/// column's ownership out to the caller, and [`Table::update_column`] moves it back in.
 pub struct Table {
     file_path: PathBuf,
     data: HashMap<String, ColumnData>,
@@ -52,6 +80,12 @@ pub struct Table {
 }
 
 impl Table {
+    /// Reads a CSV file into a new `Table`. Every column starts out as [`ColumnData::Raw`]
+    /// (unparsed strings); a cell that is an empty string is treated as missing (`None`).
+    ///
+    /// # Errors
+    /// Returns [`TableError::OpenFileError`], [`TableError::HeadersReadingError`], or
+    /// [`TableError::RowReadingError`] if the file can't be opened or read as valid CSV.
     pub fn from_csv(path: &Path) -> Result<Self, TableError> {
         let mut rdr = csv::Reader::from_path(path).map_err(TableError::OpenFileError)?;
 
@@ -99,22 +133,41 @@ impl Table {
         })
     }
 
+    /// Returns the path of the CSV file this table was read from.
     pub fn file_path(&self) -> &Path {
         &self.file_path
     }
 
+    /// Returns the number of rows in the table. Relies on all columns having equal length; if
+    /// the table has no columns at all (e.g. its only column is currently checked out), returns
+    /// `0`.
     pub fn row_count(&self) -> usize {
         self.data.values().next().map(|c| c.len()).unwrap_or(0)
     }
 
+    /// Returns the number of columns in the table.
     pub fn column_count(&self) -> usize {
         self.data.len()
     }
 
+    /// Returns the total number of elements in the table (`row_count * column_count`).
     pub fn element_count(&self) -> usize {
         self.column_count() * self.row_count()
     }
 
+    /// Checks out the column `name` as a `Column<T>`, parsing it from raw CSV strings the first
+    /// time it's requested and caching the parsed result in place for later calls.
+    ///
+    /// Ownership of the column moves to the caller — the table no longer holds it until it's
+    /// returned via [`Table::update_column`]. Only one caller can hold a column checked out at
+    /// a time.
+    ///
+    /// # Errors
+    /// Returns [`TableError::ColumnNotFound`] if no column exists with that name,
+    /// [`TableError::ColumnNotAvailable`] if it's already checked out,
+    /// [`TableError::TypeMismatch`] if it's already materialized as a different type, or
+    /// [`TableError::ParseFailed`] if its raw cells can't be parsed into `T`. On
+    /// `TypeMismatch`/`ParseFailed`, the column's data is left intact in the table.
     pub fn get_column<T>(&mut self, name: &str) -> Result<Column<T>, TableError>
     where
         T: ColumnDataVariant + std::str::FromStr,
@@ -166,6 +219,13 @@ impl Table {
         Ok(column)
     }
 
+    /// Writes a checked-out column back into the table under `name`, releasing the checkout.
+    ///
+    /// # Errors
+    /// Returns [`TableError::ColumnLengthMismatch`] if `column`'s length doesn't match the
+    /// table's other columns, [`TableError::ColumnNotCheckedOut`] if `name` isn't currently
+    /// checked out, or [`TableError::ColumnNotFound`] if `name` doesn't exist in the table at
+    /// all.
     pub fn update_column<T>(&mut self, name: &str, column: Column<T>) -> Result<String, TableError>
     where
         T: ColumnDataVariant + std::str::FromStr,
@@ -198,6 +258,12 @@ impl Table {
         }
     }
 
+    /// Adds a brand-new column to the table, using `column.name()` as its key.
+    ///
+    /// # Errors
+    /// Returns [`TableError::ColumnAlreadyExists`] if a column with that name already exists,
+    /// or [`TableError::ColumnLengthMismatch`] if `column`'s length doesn't match the table's
+    /// other columns (a table with no columns yet accepts any length).
     pub fn add_column<T>(&mut self, column: Column<T>) -> Result<String, TableError>
     where
         T: ColumnDataVariant + std::str::FromStr,
@@ -222,6 +288,14 @@ impl Table {
         Ok(format!("Column '{}' added.", new_column_name))
     }
 
+    /// Removes a column from the table entirely, regardless of whether it's currently checked
+    /// out. Useful both for ordinary column deletion and for cleaning up a name left orphaned
+    /// by the get-rename-readd workflow (there's no dedicated rename; see
+    /// [`Table::get_column`]/[`Table::add_column`]).
+    ///
+    /// # Errors
+    /// Returns [`TableError::ColumnNotFound`] if no column (checked out or not) exists with
+    /// that name.
     pub fn remove_column(&mut self, name: &str) -> Result<String, TableError> {
         match self.checkouts.get(name) {
             None => {
@@ -238,8 +312,14 @@ impl Table {
     }
 }
 
+/// Links a concrete element type (`i64`, `f64`, `String`, `bool`) to its corresponding
+/// [`ColumnData`] variant, so generic `Table` methods can dispatch to the right variant without
+/// runtime type checks.
 pub trait ColumnDataVariant: Sized {
+    /// Wraps a typed column into the matching `ColumnData` variant.
     fn wrap(column: Column<Self>) -> ColumnData;
+    /// Extracts a typed column from `ColumnData` if it's the matching variant; otherwise
+    /// returns the original `ColumnData` unchanged (so the caller can put it back).
     fn unwrap(data: ColumnData) -> Result<Column<Self>, ColumnData>;
 }
 
