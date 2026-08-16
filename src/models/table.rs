@@ -591,4 +591,52 @@ mod tests {
             _ => panic!("Unexpected result."),
         }
     }
+
+    #[test]
+    fn remove_column_succeeds_for_available_column() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let result = table.remove_column("age");
+
+        assert!(result.is_ok());
+        assert_eq!(table.column_count(), 1);
+
+        let fetched = table.get_column::<i64>("age");
+        assert!(fetched.is_err());
+    }
+
+    #[test]
+    fn remove_column_works_while_checked_out_and_allows_readd() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let checked_out_colum = table.get_column::<i64>("age").unwrap();
+
+        let result = table.remove_column("age");
+        assert!(result.is_ok());
+
+        let update_result = table.update_column("age", checked_out_colum);
+        match update_result {
+            Err(TableError::ColumnNotFound { name }) => assert_eq!(name, "age".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+
+        let new_column = Column::new_from_parsed(vec![Some(30)], "age".to_string()).unwrap();
+        let add_result = table.add_column(new_column);
+        assert!(add_result.is_ok());
+    }
+
+    #[test]
+    fn remove_column_fails_when_column_not_found() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let result = table.remove_column("city");
+
+        match result {
+            Err(TableError::ColumnNotFound { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
 }
