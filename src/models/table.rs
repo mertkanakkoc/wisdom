@@ -221,6 +221,21 @@ impl Table {
             .insert(new_column_name.clone(), ColumnState::Available);
         Ok(format!("Column '{}' added.", new_column_name))
     }
+
+    pub fn remove_column(&mut self, name: &str) -> Result<String, TableError> {
+        match self.checkouts.get(name) {
+            None => {
+                return Err(TableError::ColumnNotFound {
+                    name: name.to_string(),
+                });
+            }
+            Some(_) => {
+                self.data.remove(name);
+                self.checkouts.remove(name);
+                Ok(format!("Column '{}' removed.", name.to_string()))
+            }
+        }
+    }
 }
 
 pub trait ColumnDataVariant: Sized {
