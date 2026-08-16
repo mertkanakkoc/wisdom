@@ -528,4 +528,52 @@ mod tests {
 
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn add_column_succeeds_with_new_name() {
+        let file = write_temp_csv("age,name\n25,Ali\n30,Ayşe\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let new_column =
+            Column::new_from_parsed(vec![Some(true), Some(false)], "is_active".to_string())
+                .unwrap();
+
+        let result = table.add_column(new_column);
+
+        assert!(result.is_ok());
+        assert_eq!(table.column_count(), 3);
+
+        let fetched = table.get_column::<bool>("is_active");
+        assert!(fetched.is_ok());
+    }
+
+    #[test]
+    fn add_column_fails_when_name_already_exists() {
+        let file = write_temp_csv("age,name\n25,Ali\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let duplicate = Column::new_from_parsed(vec![Some(1)], "age".to_string()).unwrap();
+        let result = table.add_column(duplicate);
+
+        match result {
+            Err(TableError::ColumnAlreadyExists { name }) => assert_eq!(name, "age".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn add_column_fails_when_length_mismatches() {
+        let file = write_temp_csv("age,name\n25,Ali\n30,Ayşe\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let wrong_length = Column::new_from_parsed(vec![Some(1)], "score".to_string()).unwrap();
+        let result = table.add_column(wrong_length);
+
+        match result {
+            Err(TableError::ColumnLengthMismatch { length }) => {
+                assert_eq!(length, table.row_count())
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
 }
