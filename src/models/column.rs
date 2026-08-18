@@ -1,4 +1,5 @@
 mod fill;
+mod scale;
 
 use std::any::Any;
 use std::collections::HashMap;
