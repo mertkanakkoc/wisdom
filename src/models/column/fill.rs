@@ -51,6 +51,29 @@ impl<T> Column<T> {
             _ => Ok("Forward fill completed.".to_string()),
         }
     }
+
+    pub fn backward_fill(&mut self) -> Result<String, ColumnError>
+    where
+        T: Clone,
+    {
+        let mut update_elements: Vec<(usize, Option<T>)> = vec![];
+        let mut last_valid: Option<T> = None;
+        for (i, element) in self.data.iter().enumerate().rev() {
+            match element {
+                Some(val) => last_valid = Some(val.clone()),
+                None => {
+                    if last_valid.is_some() {
+                        update_elements.push((i, last_valid.clone()));
+                    }
+                }
+            }
+        }
+        let result = self.update_element(update_elements);
+        match result {
+            Err(e) => return Err(e),
+            _ => Ok("Backward fill completed.".to_string()),
+        }
+    }
 }
 
 impl Column<f64> {
