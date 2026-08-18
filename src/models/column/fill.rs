@@ -3,6 +3,7 @@ use crate::models::column::ColumnError;
 use super::Column;
 
 impl<T> Column<T> {
+    /// Returns the indices of every missing (`None`) element in the column, in order.
     pub fn missing_indices(&self) -> Vec<usize> {
         self.data
             .iter()
@@ -11,6 +12,8 @@ impl<T> Column<T> {
             .collect()
     }
 
+    /// Fills every missing element with a clone of `value`. A no-op (still `Ok`) if there are
+    /// no missing elements.
     pub fn fill_with(&mut self, value: T) -> Result<String, ColumnError>
     where
         T: Clone,
@@ -27,6 +30,9 @@ impl<T> Column<T> {
         }
     }
 
+    /// Fills each missing element with the nearest preceding non-missing value (last known
+    /// value carried forward). A missing element with no earlier non-missing value (a leading
+    /// gap) is left as `None`.
     pub fn forward_fill(&mut self) -> Result<String, ColumnError>
     where
         T: Clone,
@@ -52,6 +58,9 @@ impl<T> Column<T> {
         }
     }
 
+    /// Fills each missing element with the nearest following non-missing value (next known
+    /// value carried backward). A missing element with no later non-missing value (a trailing
+    /// gap) is left as `None`.
     pub fn backward_fill(&mut self) -> Result<String, ColumnError>
     where
         T: Clone,
@@ -77,6 +86,15 @@ impl<T> Column<T> {
 }
 
 impl Column<f64> {
+    /// Fills every missing element with the mean of the column's non-missing values.
+    ///
+    /// Only implemented for `Column<f64>` (not generic over `T`) since averaging inherently
+    /// produces a float — supporting integer columns would require an arbitrary rounding
+    /// decision.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::AllMissingElements`] if every element is missing (the mean would
+    /// be undefined).
     pub fn fill_mean(&mut self) -> Result<String, ColumnError> {
         let row_count = self.data.len();
         let missing_count = self.missing_count();
