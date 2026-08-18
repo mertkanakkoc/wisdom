@@ -142,4 +142,45 @@ mod tests {
             _ => panic!("Unexpected result."),
         }
     }
+
+    #[test]
+    fn forward_fill_replaces_missing_with_last_valid_value() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), None, Some(3), None, None], "age".to_string())
+                .unwrap();
+
+        let result = column.forward_fill();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(1)));
+        assert_eq!(column.get(1), Some(&Some(1)));
+        assert_eq!(column.get(2), Some(&Some(3)));
+        assert_eq!(column.get(3), Some(&Some(3)));
+        assert_eq!(column.get(4), Some(&Some(3)));
+    }
+
+    #[test]
+    fn forward_fill_leaves_leading_missing_values_as_none() {
+        let mut column =
+            Column::new_from_parsed(vec![None, None, Some(5)], "age".to_string()).unwrap();
+
+        let result = column.forward_fill();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&None));
+        assert_eq!(column.get(1), Some(&None));
+        assert_eq!(column.get(2), Some(&Some(5)));
+    }
+
+    #[test]
+    fn forward_fill_is_noop_when_nothing_missing() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let result = column.forward_fill();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(1)));
+        assert_eq!(column.get(1), Some(&Some(2)));
+    }
 }
