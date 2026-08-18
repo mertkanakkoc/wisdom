@@ -206,4 +206,45 @@ mod tests {
         assert_eq!(column.get(0), Some(&Some(1)));
         assert_eq!(column.get(1), Some(&Some(2)));
     }
+
+    #[test]
+    fn backward_fill_replaces_missing_with_next_valid_value() {
+        let mut column =
+            Column::new_from_parsed(vec![None, Some(1), None, None, Some(4)], "age".to_string())
+                .unwrap();
+
+        let result = column.backward_fill();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(1)));
+        assert_eq!(column.get(1), Some(&Some(1)));
+        assert_eq!(column.get(2), Some(&Some(4)));
+        assert_eq!(column.get(3), Some(&Some(4)));
+        assert_eq!(column.get(4), Some(&Some(4)));
+    }
+
+    #[test]
+    fn backward_fill_leaves_trailing_missing_values_as_none() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(5), None, None], "age".to_string()).unwrap();
+
+        let result = column.backward_fill();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(5)));
+        assert_eq!(column.get(1), Some(&None));
+        assert_eq!(column.get(2), Some(&None));
+    }
+
+    #[test]
+    fn backward_fill_is_noop_when_nothing_missing() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
+
+        let result = column.backward_fill();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(1)));
+        assert_eq!(column.get(1), Some(&Some(2)));
+    }
 }
