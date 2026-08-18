@@ -48,6 +48,8 @@ impl Column<f64> {
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
+
     use super::*;
 
     #[test]
@@ -89,5 +91,32 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(column.get(0), Some(&Some(1)));
         assert_eq!(column.get(1), Some(&Some(2)));
+    }
+
+    #[test]
+    fn fill_mean_replaces_missing_with_average() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(2.0), None, Some(4.0), None], "score".to_string())
+                .unwrap();
+
+        let result = column.fill_mean();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(2.0)));
+        assert_eq!(column.get(1), Some(&Some(3.0)));
+        assert_eq!(column.get(2), Some(&Some(4.0)));
+        assert_eq!(column.get(3), Some(&Some(3.0)));
+    }
+
+    #[test]
+    fn fill_mean_fails_when_all_missing() {
+        let mut column = Column::new_from_parsed(vec![None, None], "score".to_string()).unwrap();
+
+        let result = column.fill_mean();
+
+        match result {
+            Err(ColumnError::AllMissingElements) => {}
+            _ => panic!("Unexpected result."),
+        }
     }
 }
