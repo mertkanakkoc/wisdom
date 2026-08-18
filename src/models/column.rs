@@ -1,3 +1,5 @@
+mod fill;
+
 use std::any::Any;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -25,6 +27,9 @@ pub enum ColumnError {
     /// The same index appeared more than once in a call to [`Column::update_element`] or
     /// [`Column::remove_element`].
     DuplicatedIndices,
+    /// A fill strategy that needs at least one present value (e.g. [`Column::fill_mean`]) was
+    /// called on a column where every element is missing.
+    AllMissingElements,
 }
 
 /// The result of calling a registered behavior via [`Column::call_behavior`].
