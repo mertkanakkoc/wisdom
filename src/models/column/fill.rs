@@ -28,6 +28,24 @@ impl<T> Column<T> {
     }
 }
 
+impl Column<f64> {
+    pub fn fill_mean(&mut self) -> Result<String, ColumnError> {
+        let row_count = self.data.len();
+        let missing_count = self.missing_count();
+        if row_count == missing_count {
+            return Err(ColumnError::AllMissingElements);
+        }
+        let sum: f64 = self.data.iter().flatten().sum();
+        let filled_count: f64 = (row_count - missing_count) as f64;
+        let mean: f64 = sum / filled_count;
+        let result = self.fill_with(mean);
+        match result {
+            Err(e) => return Err(e),
+            _ => Ok("Missing elements were filled with mean value.".to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
