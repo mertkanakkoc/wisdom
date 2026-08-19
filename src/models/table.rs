@@ -1,3 +1,5 @@
+mod split;
+
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -22,23 +24,40 @@ pub enum TableError {
     /// A data row could not be read (e.g. malformed CSV).
     RowReadingError(csv::Error),
     /// [`Table::get_column`] was called on a column that is already checked out.
-    ColumnNotAvailable { name: String },
+    ColumnNotAvailable {
+        name: String,
+    },
     /// The requested column name doesn't exist in the table.
-    ColumnNotFound { name: String },
+    ColumnNotFound {
+        name: String,
+    },
     /// A `Raw` column's cells could not be parsed into the requested type `T`.
-    ParseFailed { name: String, source: ColumnError },
+    ParseFailed {
+        name: String,
+        source: ColumnError,
+    },
     /// The column exists but is already materialized as a different concrete type than the
     /// one requested.
-    TypeMismatch { name: String },
+    TypeMismatch {
+        name: String,
+    },
     /// The column being added/written back doesn't have the same length as the table's other
     /// columns.
-    ColumnLengthMismatch { length: usize },
+    ColumnLengthMismatch {
+        length: usize,
+    },
     /// [`Table::update_column`] was called on a column that was never checked out via
     /// [`Table::get_column`].
-    ColumnNotCheckedOut { name: String },
-    ColumnNotUpdated { name: String },
+    ColumnNotCheckedOut {
+        name: String,
+    },
+    ColumnNotUpdated {
+        name: String,
+    },
     /// [`Table::add_column`] was called with a name that already exists in the table.
-    ColumnAlreadyExists { name: String },
+    ColumnAlreadyExists {
+        name: String,
+    },
 }
 
 /// A single column's storage inside [`Table`], type-erased so columns of different concrete
