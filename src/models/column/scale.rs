@@ -40,6 +40,49 @@ impl Column<f64> {
             _ => Ok("Min-max scaling completed.".to_string()),
         }
     }
+
+    pub fn z_score_standardization(&mut self) -> Result<String, ColumnError> {
+        let row_count = self.data.len();
+        let missing_count = self.missing_count();
+        if row_count == missing_count {
+            return Err(ColumnError::AllMissingElements);
+        }
+
+        let sum: f64 = self.data.iter().flatten().sum();
+        let filled_count: f64 = (row_count - missing_count) as f64;
+        let mean: f64 = sum / filled_count;
+
+        let squares_sum: f64 = self
+            .data
+            .iter()
+            .flatten()
+            .map(|x| (x - mean) * (x - mean))
+            .sum();
+
+        if squares_sum == 0.0 {
+            return Err(ColumnError::FilledElementsEqual);
+        }
+
+        let division: f64 = squares_sum / filled_count;
+        let standard_deviation = division.sqrt();
+
+        let mut update_elements: Vec<(usize, Option<f64>)> = vec![];
+        for (i, element) in self.data.iter().enumerate() {
+            match element {
+                Some(val) => {
+                    let new_val = (*val - mean) / standard_deviation;
+                    update_elements.push((i, Some(new_val)));
+                }
+                None => {}
+            }
+        }
+
+        let result = self.update_element(update_elements);
+        match result {
+            Err(e) => return Err(e),
+            _ => Ok("Z-score standardization completed.".to_string()),
+        }
+    }
 }
 
 #[cfg(test)]
