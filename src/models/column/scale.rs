@@ -131,4 +131,62 @@ mod tests {
             _ => panic!("Unexpected result."),
         }
     }
+
+    #[test]
+    fn z_score_standardization_replaces_values_with_standardized_versions() {
+        let mut column = Column::new_from_parsed(
+            vec![
+                Some(2.0),
+                None,
+                Some(4.0),
+                Some(4.0),
+                Some(4.0),
+                Some(5.0),
+                Some(5.0),
+                Some(7.0),
+                Some(9.0),
+            ],
+            "score".to_string(),
+        )
+        .unwrap();
+
+        let result = column.z_score_standardization();
+
+        assert!(result.is_ok());
+        assert_eq!(column.get(0), Some(&Some(-1.5)));
+        assert_eq!(column.get(1), Some(&None));
+        assert_eq!(column.get(2), Some(&Some(-0.5)));
+        assert_eq!(column.get(3), Some(&Some(-0.5)));
+        assert_eq!(column.get(4), Some(&Some(-0.5)));
+        assert_eq!(column.get(5), Some(&Some(0.0)));
+        assert_eq!(column.get(6), Some(&Some(0.0)));
+        assert_eq!(column.get(7), Some(&Some(1.0)));
+        assert_eq!(column.get(8), Some(&Some(2.0)));
+    }
+
+    #[test]
+    fn z_score_standardization_fails_when_all_missing() {
+        let mut column: Column<f64> =
+            Column::new_from_parsed(vec![None, None], "score".to_string()).unwrap();
+
+        let result = column.z_score_standardization();
+
+        match result {
+            Err(ColumnError::AllMissingElements) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn z_score_standardization_fails_when_values_are_equal() {
+        let mut column =
+            Column::new_from_parsed(vec![Some(5.0), Some(5.0), None], "score".to_string()).unwrap();
+
+        let result = column.z_score_standardization();
+
+        match result {
+            Err(ColumnError::FilledElementsEqual) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
 }
