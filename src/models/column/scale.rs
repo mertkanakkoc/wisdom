@@ -3,6 +3,13 @@ use crate::models::column::ColumnError;
 use super::Column;
 
 impl Column<f64> {
+    /// Rescales every present value into the `[0, 1]` range: `(x - min) / (max - min)`, using
+    /// the column's own present values as `min`/`max`. Missing elements are left as `None`.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::AllMissingElements`] if every element is missing, or
+    /// [`ColumnError::FilledElementsEqual`] if all present values are equal (`max - min` would
+    /// be `0`).
     pub fn min_max_scale(&mut self) -> Result<String, ColumnError> {
         let row_count = self.data.len();
         let missing_count = self.missing_count();
@@ -41,6 +48,14 @@ impl Column<f64> {
         }
     }
 
+    /// Standardizes every present value to a z-score: `(x - mean) / population_std_dev`, using
+    /// the column's own present values to compute the mean and (population) standard
+    /// deviation. Missing elements are left as `None`.
+    ///
+    /// # Errors
+    /// Returns [`ColumnError::AllMissingElements`] if every element is missing, or
+    /// [`ColumnError::FilledElementsEqual`] if all present values are equal (standard deviation
+    /// would be `0`).
     pub fn z_score_standardization(&mut self) -> Result<String, ColumnError> {
         let row_count = self.data.len();
         let missing_count = self.missing_count();
