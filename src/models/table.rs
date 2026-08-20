@@ -1,3 +1,5 @@
+mod split;
+
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -22,23 +24,40 @@ pub enum TableError {
     /// A data row could not be read (e.g. malformed CSV).
     RowReadingError(csv::Error),
     /// [`Table::get_column`] was called on a column that is already checked out.
-    ColumnNotAvailable { name: String },
+    ColumnNotAvailable {
+        name: String,
+    },
     /// The requested column name doesn't exist in the table.
-    ColumnNotFound { name: String },
+    ColumnNotFound {
+        name: String,
+    },
     /// A `Raw` column's cells could not be parsed into the requested type `T`.
-    ParseFailed { name: String, source: ColumnError },
+    ParseFailed {
+        name: String,
+        source: ColumnError,
+    },
     /// The column exists but is already materialized as a different concrete type than the
     /// one requested.
-    TypeMismatch { name: String },
+    TypeMismatch {
+        name: String,
+    },
     /// The column being added/written back doesn't have the same length as the table's other
     /// columns.
-    ColumnLengthMismatch { length: usize },
+    ColumnLengthMismatch {
+        length: usize,
+    },
     /// [`Table::update_column`] was called on a column that was never checked out via
     /// [`Table::get_column`].
-    ColumnNotCheckedOut { name: String },
-    ColumnNotUpdated { name: String },
+    ColumnNotCheckedOut {
+        name: String,
+    },
+    ColumnNotUpdated {
+        name: String,
+    },
     /// [`Table::add_column`] was called with a name that already exists in the table.
-    ColumnAlreadyExists { name: String },
+    ColumnAlreadyExists {
+        name: String,
+    },
 }
 
 /// A single column's storage inside [`Table`], type-erased so columns of different concrete
@@ -65,6 +84,49 @@ impl ColumnData {
             ColumnData::Raw(v) => v.len(),
         }
     }
+
+    /// Builds a new `ColumnData` of the same variant, containing only the elements at the
+    /// given `indices` (in the given order). Used by [`Table::train_test_split`] to build the
+    /// train/test subsets without disturbing the original column.
+    pub fn select_rows(&self, indices: &[usize]) -> ColumnData {
+        match self {
+            ColumnData::Int(c) => {
+                let selected: Vec<Option<i64>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Int(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Float(c) => {
+                let selected: Vec<Option<f64>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Float(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Text(c) => {
+                let selected: Vec<Option<String>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Text(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Bool(c) => {
+                let selected: Vec<Option<bool>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Bool(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Raw(c) => {
+                let selected: Vec<Option<String>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Raw(selected)
+            }
+        }
+    }
 }
 
 /// An in-memory, CSV-backed table: a named collection of equal-length columns.
@@ -73,6 +135,7 @@ impl ColumnData {
 /// concrete type via [`Table::get_column`], at which point it's parsed and the result is cached
 /// in place. Table uses a checkout model instead of cloning: [`Table::get_column`] moves a
 /// column's ownership out to the caller, and [`Table::update_column`] moves it back in.
+#[derive(Default)]
 pub struct Table {
     file_path: PathBuf,
     data: HashMap<String, ColumnData>,
