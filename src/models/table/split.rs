@@ -30,7 +30,7 @@ impl Table {
         let mut column_names: Vec<String> = vec![];
         match columns {
             Some(names) => column_names = names,
-            None => column_names = self.data.keys().cloned().collect(),
+            None => column_names = self.checkouts.keys().cloned().collect(),
         }
 
         for name in column_names.iter() {
@@ -66,5 +66,91 @@ impl Table {
         }
 
         Ok((train_table, test_table))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn write_temp_csv(content: &str) -> NamedTempFile {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "{}", content).unwrap();
+        file
+    }
+
+    #[test]
+    fn train_test_split_produces_correct_row_counts() {
+        let file = write_temp_csv("id\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
+        let table = Table::from_csv(file.path()).unwrap();
+
+        let (train, test) = table.train_test_split(0.7, 42, None).unwrap();
+
+        assert_eq!(train.row_count(), 7);
+        assert_eq!(test.row_count(), 3);
+    }
+
+    #[test]
+    fn train_test_split_is_deterministic_with_same_seed() {
+        let file = write_temp_csv("id\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
+        let table = Table::from_csv(file.path()).unwrap();
+
+        let (mut train1, _) = table.train_test_split(0.7, 42, None).unwrap();
+        let (mut train2, _) = table.train_test_split(0.7, 42, None).unwrap();
+
+        let col1 = train1.get_column::<i64>("id").unwrap();
+        let col2 = train2.get_column::<i64>("id").unwrap();
+
+        let values1: Vec<Option<i64>> = (0..col1.len())
+            .map(|i| col1.get(i).cloned().flatten())
+            .collect();
+        let values2: Vec<Option<i64>> = (0..col2.len())
+            .map(|i| col2.get(i).cloned().flatten())
+            .collect();
+
+        assert_eq!(values1, values2);
+    }
+
+    #[test]
+    fn train_test_split_includes_only_requested_columns() {
+        let file = write_temp_csv("id,name\n1,Ali\n2,Ayşe\n3,Mehmet\n4,Zeynep\n");
+        let table = Table::from_csv(file.path()).unwrap();
+
+        let (train, _) = table
+            .train_test_split(0.5, 1, Some(vec!["id".to_string()]))
+            .unwrap();
+
+        assert_eq!(train.column_count(), 1);
+        assert!(train.data.contains_key("id"));
+    }
+
+    #[test]
+    fn train_test_split_fails_when_column_checked_out() {
+        let file = write_temp_csv("id,name\n1,Ali\n2,Ayşe\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let _checked_out = table.get_column::<i64>("id").unwrap();
+
+        let result = table.train_test_split(0.5, 1, None);
+
+        match result {
+            Err(TableError::ColumnNotAvailable { name }) => assert_eq!(name, "id".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn train_test_split_fails_when_column_not_found() {
+        let file = write_temp_csv("id,name\n1,Ali\n2,Ayşe\n");
+        let table = Table::from_csv(file.path()).unwrap();
+
+        let result = table.train_test_split(0.5, 1, Some(vec!["city".to_string()]));
+
+        match result {
+            Err(TableError::ColumnNotFound { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
     }
 }
