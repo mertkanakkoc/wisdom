@@ -15,25 +15,16 @@ pub enum ColumnError {
     /// The provided column name was empty.
     EmptyName,
     /// The provided column name exceeded [`MAX_NAME_LEN`] characters.
-    NameTooLong {
-        max: usize,
-        actual: usize,
-    },
+    NameTooLong { max: usize, actual: usize },
     /// A raw cell value could not be parsed into the column's target type `T`.
     ParseFailed(Box<dyn std::error::Error>),
     /// [`Column::register_behavior`] was called with a name that is already registered.
-    BehaviorAlreadyRegistered {
-        name: String,
-    },
+    BehaviorAlreadyRegistered { name: String },
     /// A behavior lookup/update/removal was attempted for a name that isn't registered.
-    BehaviorNotFound {
-        name: String,
-    },
+    BehaviorNotFound { name: String },
     /// One or more indices passed to [`Column::update_element`] or [`Column::remove_element`]
     /// were outside the bounds of the column's data (`max` is the column's current length).
-    IndexOutOfBounds {
-        max: usize,
-    },
+    IndexOutOfBounds { max: usize },
     /// The same index appeared more than once in a call to [`Column::update_element`] or
     /// [`Column::remove_element`].
     DuplicatedIndices,

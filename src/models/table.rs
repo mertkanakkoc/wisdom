@@ -84,6 +84,46 @@ impl ColumnData {
             ColumnData::Raw(v) => v.len(),
         }
     }
+
+    pub fn select_rows(&self, indices: &[usize]) -> ColumnData {
+        match self {
+            ColumnData::Int(c) => {
+                let selected: Vec<Option<i64>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Int(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Float(c) => {
+                let selected: Vec<Option<f64>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Float(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Text(c) => {
+                let selected: Vec<Option<String>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Text(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Bool(c) => {
+                let selected: Vec<Option<bool>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Bool(Column::new_from_parsed(selected, c.name().to_string()).unwrap())
+            }
+            ColumnData::Raw(c) => {
+                let selected: Vec<Option<String>> = indices
+                    .iter()
+                    .map(|&i| c.get(i).cloned().flatten())
+                    .collect();
+                ColumnData::Raw(selected)
+            }
+        }
+    }
 }
 
 /// An in-memory, CSV-backed table: a named collection of equal-length columns.
@@ -92,6 +132,7 @@ impl ColumnData {
 /// concrete type via [`Table::get_column`], at which point it's parsed and the result is cached
 /// in place. Table uses a checkout model instead of cloning: [`Table::get_column`] moves a
 /// column's ownership out to the caller, and [`Table::update_column`] moves it back in.
+#[derive(Default)]
 pub struct Table {
     file_path: PathBuf,
     data: HashMap<String, ColumnData>,
