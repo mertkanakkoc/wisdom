@@ -7,6 +7,19 @@ use crate::models::table::{ColumnState, TableError};
 use super::Table;
 
 impl Table {
+    /// Splits the table's rows into a train/test pair of new, independent tables, leaving the
+    /// original table untouched.
+    ///
+    /// `ratio` is the fraction of rows assigned to the train table (e.g. `0.8` for an 80/20
+    /// split). Row order is shuffled deterministically via `seed` — the same `seed` and `ratio`
+    /// always produce the same split. `columns` selects which columns to include: `None`
+    /// includes every column the table currently has (including checked-out ones, which then
+    /// triggers the error below), `Some(names)` includes only the named columns.
+    ///
+    /// # Errors
+    /// Returns [`TableError::ColumnNotFound`] if a requested column doesn't exist, or
+    /// [`TableError::ColumnNotAvailable`] if a requested column is currently checked out via
+    /// [`Table::get_column`].
     pub fn train_test_split(
         &self,
         ratio: f64,
