@@ -85,6 +85,9 @@ impl ColumnData {
         }
     }
 
+    /// Builds a new `ColumnData` of the same variant, containing only the elements at the
+    /// given `indices` (in the given order). Used by [`Table::train_test_split`] to build the
+    /// train/test subsets without disturbing the original column.
     pub fn select_rows(&self, indices: &[usize]) -> ColumnData {
         match self {
             ColumnData::Int(c) => {
