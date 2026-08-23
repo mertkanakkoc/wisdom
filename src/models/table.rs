@@ -59,6 +59,16 @@ pub enum TableError {
     ColumnAlreadyExists {
         name: String,
     },
+    NonNumericColumn {
+        name: String,
+    },
+    MissingValuesPresent {
+        name: String,
+    },
+    TensorCreationFailed(candle_core::Error),
+    TargetColumnInFeatures {
+        name: String,
+    },
 }
 
 /// A single column's storage inside [`Table`], type-erased so columns of different concrete
