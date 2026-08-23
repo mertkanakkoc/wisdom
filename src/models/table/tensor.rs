@@ -5,6 +5,18 @@ use crate::models::table::{ColumnData, TableError};
 use super::Table;
 
 impl Table {
+    /// Converts the given columns into a pair of `candle` tensors ready for training: `X`
+    /// (features, shape `(row_count, feature_columns.len())`) and `y` (target, shape
+    /// `(row_count,)`). Values are read in `feature_columns`' order and cast to `f32`
+    /// (`Bool` becomes `1.0`/`0.0`); the underlying table is only borrowed, not consumed or
+    /// checked out.
+    ///
+    /// # Errors
+    /// Returns [`TableError::TargetColumnInFeatures`] if `target_column` also appears in
+    /// `feature_columns`, [`TableError::ColumnNotFound`] if any named column doesn't exist,
+    /// [`TableError::NonNumericColumn`] if any named column is `Text`/`Raw`,
+    /// [`TableError::MissingValuesPresent`] if any named column has a missing value, or
+    /// [`TableError::TensorCreationFailed`] if `candle` itself rejects the resulting data/shape.
     pub fn to_tensor(
         &self,
         feature_columns: Vec<String>,
