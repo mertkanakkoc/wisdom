@@ -11,6 +11,12 @@ impl Table {
     /// (`Bool` becomes `1.0`/`0.0`); the underlying table is only borrowed, not consumed or
     /// checked out.
     ///
+    /// Every named column must already be materialized to `Int`/`Float`/`Bool` — a column still
+    /// sitting as [`ColumnData::Raw`] (never checked out via [`Table::get_column`] and written
+    /// back via [`Table::update_column`]) is rejected as [`TableError::NonNumericColumn`], even
+    /// if its raw strings would actually parse as numbers. Materializing it is the caller's
+    /// responsibility, not something this function does implicitly.
+    ///
     /// # Errors
     /// Returns [`TableError::TargetColumnInFeatures`] if `target_column` also appears in
     /// `feature_columns`, [`TableError::ColumnNotFound`] if any named column doesn't exist,
@@ -184,5 +190,130 @@ impl Table {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn write_temp_csv(content: &str) -> NamedTempFile {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "{}", content).unwrap();
+        file
+    }
+
+    #[test]
+    fn to_tensor_produces_correct_x_and_y() {
+        let file = write_temp_csv("age,score,label\n25,1.5,0\n30,2.5,1\n35,3.5,0\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        for name in ["age", "score", "label"] {
+            let column = table.get_column::<f64>(name).unwrap();
+            table.update_column(name, column).unwrap();
+        }
+
+        let device = Device::Cpu;
+        let (x, y) = table
+            .to_tensor(
+                vec!["age".to_string(), "score".to_string()],
+                "label".to_string(),
+                &device,
+            )
+            .unwrap();
+
+        let x_values = x.to_vec2::<f32>().unwrap();
+        let y_values = y.to_vec1::<f32>().unwrap();
+
+        assert_eq!(
+            x_values,
+            vec![vec![25.0, 1.5], vec![30.0, 2.5], vec![35.0, 3.5]]
+        );
+        assert_eq!(y_values, vec![0.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn to_tensor_fails_when_target_in_features() {
+        let file = write_temp_csv("age,label\n25,0\n30,1\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        for name in ["age", "label"] {
+            let column = table.get_column::<f64>(name).unwrap();
+            table.update_column(name, column).unwrap();
+        }
+
+        let device = Device::Cpu;
+        let result = table.to_tensor(
+            vec!["age".to_string(), "label".to_string()],
+            "label".to_string(),
+            &device,
+        );
+
+        match result {
+            Err(TableError::TargetColumnInFeatures { name }) => {
+                assert_eq!(name, "label".to_string())
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn to_tensor_fails_when_column_not_found() {
+        let file = write_temp_csv("age,label\n25,0\n30,1\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        for name in ["age", "label"] {
+            let column = table.get_column::<f64>(name).unwrap();
+            table.update_column(name, column).unwrap();
+        }
+
+        let device = Device::Cpu;
+        let result = table.to_tensor(vec!["city".to_string()], "label".to_string(), &device);
+
+        match result {
+            Err(TableError::ColumnNotFound { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn to_tensor_fails_for_non_numeric_column() {
+        let file = write_temp_csv("age,city\n25,Istanbul\n30,Ankara\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = table.get_column::<f64>("age").unwrap();
+        table.update_column("age", column).unwrap();
+
+        let device = Device::Cpu;
+        let result = table.to_tensor(vec!["city".to_string()], "age".to_string(), &device);
+
+        match result {
+            Err(TableError::NonNumericColumn { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn to_tensor_fails_when_missing_values_present() {
+        let file = write_temp_csv("age,label\n25,0\n,1\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        for name in ["age", "label"] {
+            let column = table.get_column::<f64>(name).unwrap();
+            table.update_column(name, column).unwrap();
+        }
+
+        let device = Device::Cpu;
+        let result = table.to_tensor(vec!["age".to_string()], "label".to_string(), &device);
+
+        match result {
+            Err(TableError::MissingValuesPresent { name }) => {
+                assert_eq!(name, "age".to_string())
+            }
+            _ => panic!("Unexpected result."),
+        }
     }
 }
