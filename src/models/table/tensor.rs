@@ -38,13 +38,32 @@ impl Table {
         let mut combined_for_x: Vec<f32> = vec![];
         let mut for_y: Vec<f32> = vec![];
 
+        let mut columns_for_x: Vec<&ColumnData> = vec![];
+        for feature_name in feature_columns.iter() {
+            columns_for_x.push({
+                self.data
+                    .get(feature_name)
+                    .ok_or_else(|| TableError::ColumnNotFound {
+                        name: feature_name.clone(),
+                    })?
+            });
+        }
+        let column_for_y =
+            self.data
+                .get(&target_column)
+                .ok_or_else(|| TableError::ColumnNotFound {
+                    name: target_column.clone(),
+                })?;
+
         let row_count = self.row_count();
         for i in 0..row_count {
-            for name in combined.iter() {
-                let from_table = self
-                    .data
-                    .get(name)
-                    .ok_or_else(|| TableError::ColumnNotFound { name: name.clone() })?;
+            for (index, name) in combined.iter().enumerate() {
+                let from_table: &ColumnData;
+                if *name == target_column {
+                    from_table = column_for_y;
+                } else {
+                    from_table = columns_for_x[index];
+                }
                 match from_table {
                     ColumnData::Raw(_) | ColumnData::Text(_) => {
                         return Err(TableError::NonNumericColumn { name: name.clone() });
