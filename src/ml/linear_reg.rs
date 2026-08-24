@@ -27,3 +27,31 @@ pub fn train_linear_regression(
     }
     Ok(model)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn train_linear_regression_reduces_loss() {
+        let device = Device::Cpu;
+        let x = Tensor::new(&[[1f32], [2.], [3.], [4.]], &device).unwrap();
+        let y = Tensor::new(&[3f32, 5., 7., 9.], &device).unwrap();
+
+        let model = train_linear_regression(&x, &y, 100, 0.05, &device).unwrap();
+
+        let prdedictions = model.forward(&x).unwrap();
+        let y_reshaped = y.reshape((4, 1)).unwrap();
+        let final_loss = prdedictions
+            .sub(&y_reshaped)
+            .unwrap()
+            .sqr()
+            .unwrap()
+            .sum_all()
+            .unwrap()
+            .to_vec0::<f32>()
+            .unwrap();
+
+        assert!(final_loss < 1.0);
+    }
+}
