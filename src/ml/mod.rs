@@ -1,1 +1,1 @@
-mod linear_reg;
+pub mod linear_reg;
