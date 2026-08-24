@@ -1,4 +1,5 @@
 mod split;
+mod tensor;
 
 use std::{
     collections::HashMap,
@@ -56,6 +57,23 @@ pub enum TableError {
     },
     /// [`Table::add_column`] was called with a name that already exists in the table.
     ColumnAlreadyExists {
+        name: String,
+    },
+    /// [`Table::to_tensor`] was asked to include a column that isn't numeric-convertible
+    /// (`Text`/`Raw`) — only `Int`, `Float`, and `Bool` columns can be converted to a tensor.
+    NonNumericColumn {
+        name: String,
+    },
+    /// [`Table::to_tensor`] was asked to include a column that has one or more missing values;
+    /// a tensor has no way to represent a missing cell, so every value must be present.
+    MissingValuesPresent {
+        name: String,
+    },
+    /// [`Table::to_tensor`]'s underlying call to `candle_core::Tensor::from_vec` failed.
+    TensorCreationFailed(candle_core::Error),
+    /// [`Table::to_tensor`] was called with the target column also listed among the feature
+    /// columns, which would leak the target into the inputs (target/data leakage).
+    TargetColumnInFeatures {
         name: String,
     },
 }

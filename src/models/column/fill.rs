@@ -128,7 +128,7 @@ mod tests {
     fn missing_indices_returns_empty_when_none_missing() {
         let column = Column::new_from_parsed(vec![Some(1), Some(2)], "age".to_string()).unwrap();
 
-        assert_eq!(column.missing_indices(), vec![])
+        assert_eq!(column.missing_indices(), Vec::<usize>::new())
     }
 
     #[test]
