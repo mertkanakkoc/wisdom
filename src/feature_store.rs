@@ -1,6 +1,10 @@
-use std::{collections::HashMap, io::Error, time::SystemTime};
+use std::{collections::HashMap, time::SystemTime};
 
 use crate::models::table::ColumnData;
+
+pub enum FeatureStoreError {
+    MaxVersionsTooLow { min: usize, actual: usize },
+}
 
 pub enum Transformation {
     FillWith,
@@ -25,4 +29,18 @@ pub struct FeatureStore {
     max_versions: usize,
 }
 
-impl FeatureStore {}
+impl FeatureStore {
+    pub fn new(max_versions: usize) -> Result<Self, FeatureStoreError> {
+        if max_versions == 0 {
+            return Err(FeatureStoreError::MaxVersionsTooLow {
+                min: 1,
+                actual: max_versions,
+            });
+        }
+
+        Ok(Self {
+            versions: HashMap::new(),
+            max_versions,
+        })
+    }
+}
