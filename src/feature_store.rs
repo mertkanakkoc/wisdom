@@ -148,6 +148,97 @@ mod tests {
     }
 
     #[test]
+    fn commit_returns_incrementing_version_numbers() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column1 = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        let column2 = Column::new_from_parsed(vec![Some(2.0)], "age".to_string()).unwrap();
+
+        let first = store.commit(
+            ColumnData::Float(column1),
+            Transformation::Custom("v1".to_string()),
+        );
+        let second = store.commit(
+            ColumnData::Float(column2),
+            Transformation::Custom("v2".to_string()),
+        );
+
+        assert_eq!(first.unwrap(), 1);
+        assert_eq!(second.unwrap(), 2);
+    }
+
+    #[test]
+    fn commit_fails_for_raw_column() {
+        let mut store = FeatureStore::new(5).unwrap();
+
+        let result = store.commit(
+            ColumnData::Raw(vec![Some("25".to_string())]),
+            Transformation::Custom("v1".to_string()),
+        );
+
+        match result {
+            Err(FeatureStoreError::RawColumnExists) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn commit_tracks_versions_independently_per_column() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let age = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        let score = Column::new_from_parsed(vec![Some(2.0)], "score".to_string()).unwrap();
+
+        let age_version = store.commit(
+            ColumnData::Float(age),
+            Transformation::Custom("v1".to_string()),
+        );
+        let score_version = store.commit(
+            ColumnData::Float(score),
+            Transformation::Custom("v1".to_string()),
+        );
+
+        assert_eq!(age_version.unwrap(), 1);
+        assert_eq!(score_version.unwrap(), 1);
+    }
+
+    #[test]
+    fn commit_prunes_middle_versions_beyond_max_versions() {
+        let mut store = FeatureStore::new(3).unwrap();
+
+        for i in 1..=5 {
+            let column = Column::new_from_parsed(vec![Some(i as f64)], "age".to_string()).unwrap();
+            store
+                .commit(
+                    ColumnData::Float(column),
+                    Transformation::Custom(format!("v{i}")),
+                )
+                .unwrap();
+        }
+
+        assert!(store.get_version("age", 1).is_ok());
+        assert!(store.get_version("age", 2).is_err());
+        assert!(store.get_version("age", 3).is_err());
+        assert!(store.get_version("age", 4).is_ok());
+        assert!(store.get_version("age", 5).is_ok());
+    }
+
+    #[test]
+    fn commit_never_exceeds_max_versions() {
+        let mut store = FeatureStore::new(3).unwrap();
+
+        for i in 1..=10 {
+            let column = Column::new_from_parsed(vec![Some(i as f64)], "age".to_string()).unwrap();
+            store
+                .commit(
+                    ColumnData::Float(column),
+                    Transformation::Custom(format!("v{i}")),
+                )
+                .unwrap();
+        }
+
+        assert_eq!(store.versions.get("age").unwrap().len(), 3);
+    }
+
+    #[test]
     fn get_version_returns_committed_version() {
         let mut store = FeatureStore::new(5).unwrap();
         let column =
