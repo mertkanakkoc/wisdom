@@ -146,6 +146,11 @@ impl ColumnData {
         }
     }
 
+    /// Returns the wrapped column's name, or `None` if this is still a [`ColumnData::Raw`]
+    /// column (which has no name of its own — it's only known by its key in [`Table`]'s
+    /// internal map). Used by [`crate::feature_store::FeatureStore::commit`] to derive a
+    /// feature's name from its data instead of taking a separate, independently-typeable name
+    /// parameter (the same reasoning as [`Table::add_column`]).
     pub fn extract_name(&self) -> Option<&str> {
         match self {
             ColumnData::Int(c) => Some(c.name()),
