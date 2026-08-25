@@ -4,7 +4,7 @@ use crate::models::table::ColumnData;
 
 pub enum FeatureStoreError {
     MaxVersionsTooLow { min: usize, actual: usize },
-    RawColumnPresent,
+    RawColumnExists,
 }
 
 pub enum Transformation {
@@ -55,7 +55,7 @@ impl FeatureStore {
             Some(n) => {
                 name = n.to_string();
             }
-            None => return Err(FeatureStoreError::RawColumnPresent),
+            None => return Err(FeatureStoreError::RawColumnExists),
         }
         let versions = self.versions.entry(name.clone()).or_insert_with(Vec::new);
 
