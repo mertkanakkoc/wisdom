@@ -35,9 +35,9 @@ pub struct FeatureStore {
 
 impl FeatureStore {
     pub fn new(max_versions: usize) -> Result<Self, FeatureStoreError> {
-        if max_versions == 0 {
+        if max_versions < 2 {
             return Err(FeatureStoreError::MaxVersionsTooLow {
-                min: 1,
+                min: 2,
                 actual: max_versions,
             });
         }
@@ -123,8 +123,21 @@ mod tests {
 
         match result {
             Err(FeatureStoreError::MaxVersionsTooLow { min, actual }) => {
-                assert_eq!(min, 1);
+                assert_eq!(min, 2);
                 assert_eq!(actual, 0);
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn new_fails_when_max_versions_is_one() {
+        let result = FeatureStore::new(1);
+
+        match result {
+            Err(FeatureStoreError::MaxVersionsTooLow { min, actual }) => {
+                assert_eq!(min, 2);
+                assert_eq!(actual, 1);
             }
             _ => panic!("Unexpected result."),
         }
