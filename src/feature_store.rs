@@ -2,14 +2,25 @@ use std::{collections::HashMap, time::SystemTime};
 
 use crate::models::table::ColumnData;
 
+/// Errors that can occur while creating or using a [`FeatureStore`].
 #[derive(Debug)]
 pub enum FeatureStoreError {
+    /// [`FeatureStore::new`] was called with `max_versions < 2` — at least 2 is required so the
+    /// permanently-kept first version and at least one more recent version can coexist.
     MaxVersionsTooLow { min: usize, actual: usize },
+    /// [`FeatureStore::commit`] was given a [`ColumnData::Raw`] value, which has no name of its
+    /// own to commit under (see [`ColumnData::extract_name`]).
     RawColumnExists,
+    /// The requested `(name, version)` pair doesn't exist — either the feature was never
+    /// committed, or that specific version number doesn't exist for it (pruned or never
+    /// existed). `version` always echoes back exactly what was asked for.
     VersionNotFound { name: String, version: usize },
+    /// [`FeatureStore::get_latest_version`] was called for a feature that was never committed.
     FeatureNotFound { name: String },
 }
 
+/// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.
+/// Supplied explicitly by the caller of [`FeatureStore::commit`]; never inferred by the store.
 pub enum Transformation {
     FillWith,
     FillMean,
@@ -17,9 +28,12 @@ pub enum Transformation {
     BackwardFill,
     MinMaxScale,
     ZScoreStandardization,
+    /// An escape hatch for any transformation not covered by the other variants.
     Custom(String),
 }
 
+/// A single, immutable, historical snapshot of one feature (column), as recorded by
+/// [`FeatureStore::commit`].
 pub struct ColumnVersion {
     data: ColumnData,
     version_number: usize,
@@ -28,12 +42,28 @@ pub struct ColumnVersion {
     timestamp: SystemTime,
 }
 
+/// A version history and lineage store for features (columns), separate from [`Table`]'s live,
+/// mutable working copy.
+///
+/// [`Table`] always holds the current/working state of a column; `FeatureStore` only records a
+/// snapshot when the caller explicitly calls [`FeatureStore::commit`] — there's no automatic or
+/// implicit syncing, so "the latest version" here means "the last thing someone committed," not
+/// necessarily "what `Table` currently holds."
+///
+/// [`Table`]: crate::models::table::Table
 pub struct FeatureStore {
     versions: HashMap<String, Vec<ColumnVersion>>,
     max_versions: usize,
 }
 
 impl FeatureStore {
+    /// Creates a new, empty `FeatureStore`. `max_versions` is a hard, store-wide cap on how
+    /// many versions of any single feature are kept at once — the first version committed for a
+    /// feature always survives pruning, so `max_versions` must be at least 2 (one slot for the
+    /// first version, at least one more for recent history).
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::MaxVersionsTooLow`] if `max_versions < 2`.
     pub fn new(max_versions: usize) -> Result<Self, FeatureStoreError> {
         if max_versions < 2 {
             return Err(FeatureStoreError::MaxVersionsTooLow {
@@ -48,6 +78,21 @@ impl FeatureStore {
         })
     }
 
+    /// Records `data` as a new version of the feature named by `data.extract_name()`, tagged
+    /// with `transformation` and the current time. The feature's name is derived from `data`
+    /// itself (see [`ColumnData::extract_name`]) rather than taken as a separate parameter, so
+    /// it can never drift out of sync with the column's own name; to commit under a different
+    /// name, rename the underlying `Column` first.
+    ///
+    /// Version numbers auto-increment per feature name, starting at 1. If this commit pushes
+    /// the feature's version count past `max_versions`, the oldest version *after* the first
+    /// one is pruned — the very first version committed for a feature is never pruned.
+    ///
+    /// Returns the new version's number.
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::RawColumnExists`] if `data` is [`ColumnData::Raw`]
+    /// (unmaterialized, with no name to commit under).
     pub fn commit(
         &mut self,
         data: ColumnData,
@@ -79,6 +124,11 @@ impl FeatureStore {
         Ok(max_version + 1)
     }
 
+    /// Looks up a specific historical version of a feature by name and version number.
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::VersionNotFound`] if `name` was never committed, or if it
+    /// was but doesn't have this particular `version` (pruned or never existed).
     pub fn get_version(
         &self,
         name: &str,
@@ -93,6 +143,10 @@ impl FeatureStore {
             })
     }
 
+    /// Looks up the most recently committed version of a feature.
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::FeatureNotFound`] if `name` was never committed.
     pub fn get_latest_version(&self, name: &str) -> Result<&ColumnVersion, FeatureStoreError> {
         let max_version = self
             .versions
