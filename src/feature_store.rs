@@ -2,6 +2,7 @@ use std::{collections::HashMap, time::SystemTime};
 
 use crate::models::table::ColumnData;
 
+#[derive(Debug)]
 pub enum FeatureStoreError {
     MaxVersionsTooLow { min: usize, actual: usize },
     RawColumnExists,
@@ -70,5 +71,33 @@ impl FeatureStore {
         });
 
         Ok(max_version + 1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_succeeds_with_valid_max_versions() {
+        let store = FeatureStore::new(5);
+
+        assert!(store.is_ok());
+        let store = store.unwrap();
+        assert_eq!(store.max_versions, 5);
+        assert!(store.versions.is_empty());
+    }
+
+    #[test]
+    fn new_fails_when_max_versions_is_zero() {
+        let result = FeatureStore::new(0);
+
+        match result {
+            Err(FeatureStoreError::MaxVersionsTooLow { min, actual }) => {
+                assert_eq!(min, 1);
+                assert_eq!(actual, 0);
+            }
+            _ => panic!("Unexpected result."),
+        }
     }
 }
