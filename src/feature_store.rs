@@ -72,6 +72,10 @@ impl FeatureStore {
             timestamp: SystemTime::now(),
         });
 
+        if versions.len() > self.max_versions {
+            versions.remove(1);
+        }
+
         Ok(max_version + 1)
     }
 
