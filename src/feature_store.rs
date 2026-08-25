@@ -4,6 +4,7 @@ use crate::models::table::ColumnData;
 
 pub enum FeatureStoreError {
     MaxVersionsTooLow { min: usize, actual: usize },
+    RawColumnPresent,
 }
 
 pub enum Transformation {
@@ -42,5 +43,32 @@ impl FeatureStore {
             versions: HashMap::new(),
             max_versions,
         })
+    }
+
+    pub fn commit(
+        &mut self,
+        data: ColumnData,
+        transformation: Transformation,
+    ) -> Result<usize, FeatureStoreError> {
+        let name: String;
+        match data.extract_name() {
+            Some(n) => {
+                name = n.to_string();
+            }
+            None => return Err(FeatureStoreError::RawColumnPresent),
+        }
+        let versions = self.versions.entry(name.clone()).or_insert_with(Vec::new);
+
+        let max_version = versions.iter().map(|v| v.version_number).max().unwrap_or(0);
+
+        versions.push(ColumnVersion {
+            data,
+            version_number: max_version + 1,
+            name,
+            transformation,
+            timestamp: SystemTime::now(),
+        });
+
+        Ok(max_version + 1)
     }
 }

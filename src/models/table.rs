@@ -145,6 +145,16 @@ impl ColumnData {
             }
         }
     }
+
+    pub fn extract_name(&self) -> Option<&str> {
+        match self {
+            ColumnData::Int(c) => Some(c.name()),
+            ColumnData::Float(c) => Some(c.name()),
+            ColumnData::Bool(c) => Some(c.name()),
+            ColumnData::Text(c) => Some(c.name()),
+            ColumnData::Raw(_) => None,
+        }
+    }
 }
 
 /// An in-memory, CSV-backed table: a named collection of equal-length columns.
