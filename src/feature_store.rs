@@ -6,6 +6,8 @@ use crate::models::table::ColumnData;
 pub enum FeatureStoreError {
     MaxVersionsTooLow { min: usize, actual: usize },
     RawColumnExists,
+    VersionNotFound { name: String, version: usize },
+    FeatureNotFound { name: String },
 }
 
 pub enum Transformation {
@@ -71,6 +73,31 @@ impl FeatureStore {
         });
 
         Ok(max_version + 1)
+    }
+
+    pub fn get_version(
+        &self,
+        name: &str,
+        version: usize,
+    ) -> Result<&ColumnVersion, FeatureStoreError> {
+        self.versions
+            .get(name)
+            .and_then(|versions| versions.iter().find(|v| v.version_number == version))
+            .ok_or_else(|| FeatureStoreError::VersionNotFound {
+                name: name.to_string(),
+                version,
+            })
+    }
+
+    pub fn get_latest_version(&self, name: &str) -> Result<&ColumnVersion, FeatureStoreError> {
+        let max_version = self
+            .versions
+            .get(name)
+            .map(|versions| versions.iter().map(|v| v.version_number).max().unwrap_or(0))
+            .ok_or_else(|| FeatureStoreError::FeatureNotFound {
+                name: name.to_string(),
+            })?;
+        self.get_version(name, max_version)
     }
 }
 
