@@ -103,6 +103,8 @@ impl FeatureStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::models::column::Column;
+
     use super::*;
 
     #[test]
@@ -123,6 +125,101 @@ mod tests {
             Err(FeatureStoreError::MaxVersionsTooLow { min, actual }) => {
                 assert_eq!(min, 1);
                 assert_eq!(actual, 0);
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn get_version_returns_committed_version() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column =
+            Column::new_from_parsed(vec![Some(1.0), Some(2.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("initial".to_string()),
+            )
+            .unwrap();
+
+        let result = store.get_version("age", 1);
+        assert!(result.is_ok());
+        let version = result.unwrap();
+        assert_eq!(version.version_number, 1);
+        assert_eq!(version.name, "age".to_string());
+    }
+
+    #[test]
+    fn get_version_fails_for_nonexistent_version() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("initial".to_string()),
+            )
+            .unwrap();
+
+        let result = store.get_version("age", 5);
+
+        match result {
+            Err(FeatureStoreError::VersionNotFound { name, version }) => {
+                assert_eq!(name, "age".to_string());
+                assert_eq!(version, 5);
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn get_version_fails_for_uncommitted_column() {
+        let store = FeatureStore::new(5).unwrap();
+
+        let result = store.get_version("city", 1);
+
+        match result {
+            Err(FeatureStoreError::VersionNotFound { name, version }) => {
+                assert_eq!(name, "city".to_string());
+                assert_eq!(version, 1);
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn get_latest_version_returns_highest_version() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column1 = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        let column2 = Column::new_from_parsed(vec![Some(2.0)], "age".to_string()).unwrap();
+
+        store
+            .commit(
+                ColumnData::Float(column1),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        store
+            .commit(
+                ColumnData::Float(column2),
+                Transformation::Custom("v2".to_string()),
+            )
+            .unwrap();
+
+        let result = store.get_latest_version("age");
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().version_number, 2);
+    }
+
+    #[test]
+    fn get_latest_version_fails_for_uncommitted_column() {
+        let store = FeatureStore::new(5).unwrap();
+
+        let result = store.get_latest_version("city");
+
+        match result {
+            Err(FeatureStoreError::FeatureNotFound { name }) => {
+                assert_eq!(name, "city".to_string())
             }
             _ => panic!("Unexpected result."),
         }
