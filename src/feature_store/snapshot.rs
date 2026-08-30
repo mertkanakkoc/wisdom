@@ -66,7 +66,11 @@ impl FeatureStore {
         ordered_features: Vec<(String, usize)>,
         label: Option<String>,
     ) -> Result<SnapshotId, FeatureStoreError> {
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
         for (name, version) in ordered_features.iter() {
+            if !seen.insert(name.as_str()) {
+                return Err(FeatureStoreError::DuplicateFeatureInSnapshot { name: name.clone() });
+            }
             self.get_version(name, *version)?;
         }
 

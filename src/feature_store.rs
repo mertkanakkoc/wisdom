@@ -35,6 +35,9 @@ pub enum FeatureStoreError {
     SnapshotNotFound {
         id: SnapshotId,
     },
+    DuplicateFeatureInSnapshot {
+        name: String,
+    },
 }
 
 /// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.
