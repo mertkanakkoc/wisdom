@@ -6,9 +6,24 @@ use crate::feature_store::FeatureStoreError;
 
 use super::FeatureStore;
 
+/// A content-addressed identifier for a [`Snapshot`] — a hex-encoded SHA-256 digest computed
+/// over the snapshot's `(name, version)` pairs *and their order* (see
+/// [`FeatureStore::create_snapshot`]). The same combination, given in the same order, always
+/// produces the same `SnapshotId`; a different order produces a different one, since feature
+/// order is significant for reconstructing the exact tensor layout a model was trained on.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SnapshotId(String);
 
+/// A named, ordered combination of feature versions — the "dataset version" a model is actually
+/// trained or served against, as opposed to [`ColumnVersion`]'s per-feature history.
+///
+/// Created via [`FeatureStore::create_snapshot`] and looked up via
+/// [`FeatureStore::get_snapshot`]. `ordered_features`' order is preserved exactly as given at
+/// creation time, so it can later drive [`Table::to_tensor`]'s `feature_columns` argument
+/// without the caller having to remember or re-derive the order themselves.
+///
+/// [`ColumnVersion`]: crate::feature_store::ColumnVersion
+/// [`Table::to_tensor`]: crate::models::table::Table::to_tensor
 pub struct Snapshot {
     id: SnapshotId,
     ordered_features: Vec<(String, usize)>,
@@ -29,6 +44,23 @@ fn compute_snapshot_id(ordered_features: &[(String, usize)]) -> SnapshotId {
 }
 
 impl FeatureStore {
+    /// Records `ordered_features` — an ordered list of `(feature name, version)` pairs — as a
+    /// single, named [`Snapshot`], and returns its [`SnapshotId`].
+    ///
+    /// The order of `ordered_features` is significant and preserved as given: it becomes part
+    /// of the computed `SnapshotId` (the same pairs in a different order produce a different
+    /// snapshot), and is later handed back unchanged by [`FeatureStore::get_snapshot`] so a
+    /// caller can reconstruct the exact same tensor layout without having to remember or
+    /// re-derive the order themselves. `label` is an optional human-readable tag (e.g.
+    /// `"v1-training-set"`); pass `None` if it isn't needed.
+    ///
+    /// Every `(name, version)` pair is validated against [`FeatureStore::get_version`] *before*
+    /// the snapshot is computed or stored, so a failing call leaves the store unchanged — no
+    /// partial or invalid snapshot is ever recorded.
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::VersionNotFound`] if any `(name, version)` pair in
+    /// `ordered_features` doesn't exist.
     pub fn create_snapshot(
         &mut self,
         ordered_features: Vec<(String, usize)>,
@@ -52,6 +84,11 @@ impl FeatureStore {
         Ok(id)
     }
 
+    /// Looks up a previously created [`Snapshot`] by its [`SnapshotId`].
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::SnapshotNotFound`] if `id` doesn't match any snapshot
+    /// created by [`FeatureStore::create_snapshot`].
     pub fn get_snapshot(&self, id: &SnapshotId) -> Result<&Snapshot, FeatureStoreError> {
         self.snapshots
             .get(id)

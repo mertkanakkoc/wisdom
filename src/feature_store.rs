@@ -30,6 +30,8 @@ pub enum FeatureStoreError {
     FeatureNotFound {
         name: String,
     },
+    /// [`FeatureStore::get_snapshot`] was called with an `id` that doesn't match any snapshot
+    /// created by [`FeatureStore::create_snapshot`].
     SnapshotNotFound {
         id: SnapshotId,
     },
@@ -65,6 +67,10 @@ pub struct ColumnVersion {
 /// snapshot when the caller explicitly calls [`FeatureStore::commit`] — there's no automatic or
 /// implicit syncing, so "the latest version" here means "the last thing someone committed," not
 /// necessarily "what `Table` currently holds."
+///
+/// On top of per-feature versioning, `FeatureStore` also lets a caller pin down a whole
+/// *combination* of feature versions as a single, content-addressed [`Snapshot`] (see
+/// [`FeatureStore::create_snapshot`]) — the unit a model is actually trained/served against.
 ///
 /// [`Table`]: crate::models::table::Table
 pub struct FeatureStore {
