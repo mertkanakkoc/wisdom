@@ -101,7 +101,7 @@ impl Column<f64> {
         if row_count == missing_count {
             return Err(ColumnError::AllMissingElements);
         }
-        let sum: f64 = self.data.iter().flatten().sum();
+        let sum: f64 = self.present_values().sum();
         let filled_count: f64 = (row_count - missing_count) as f64;
         let mean: f64 = sum / filled_count;
         let result = self.fill_with(mean);

@@ -19,9 +19,7 @@ impl Column<f64> {
         }
 
         let (min, max) = self
-            .data
-            .iter()
-            .flatten()
+            .present_values()
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), &x| {
                 (min.min(x), max.max(x))
             });
@@ -63,16 +61,11 @@ impl Column<f64> {
             return Err(ColumnError::AllMissingElements);
         }
 
-        let sum: f64 = self.data.iter().flatten().sum();
+        let sum: f64 = self.present_values().sum();
         let filled_count: f64 = (row_count - missing_count) as f64;
         let mean: f64 = sum / filled_count;
 
-        let squares_sum: f64 = self
-            .data
-            .iter()
-            .flatten()
-            .map(|x| (x - mean) * (x - mean))
-            .sum();
+        let squares_sum: f64 = self.present_values().map(|x| (x - mean) * (x - mean)).sum();
 
         if squares_sum == 0.0 {
             return Err(ColumnError::FilledElementsEqual);
