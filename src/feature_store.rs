@@ -50,6 +50,10 @@ pub enum FeatureStoreError {
     NonNumericFeature {
         name: String,
     },
+    AllValuesMissing {
+        name: String,
+        version: usize,
+    },
 }
 
 /// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.
