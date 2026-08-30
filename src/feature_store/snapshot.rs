@@ -56,11 +56,13 @@ impl FeatureStore {
     ///
     /// Every `(name, version)` pair is validated against [`FeatureStore::get_version`] *before*
     /// the snapshot is computed or stored, so a failing call leaves the store unchanged — no
-    /// partial or invalid snapshot is ever recorded.
+    /// partial or invalid snapshot is ever recorded. `ordered_features` also can't repeat the
+    /// same feature name twice — this is checked before any version lookup happens.
     ///
     /// # Errors
-    /// Returns [`FeatureStoreError::VersionNotFound`] if any `(name, version)` pair in
-    /// `ordered_features` doesn't exist.
+    /// Returns [`FeatureStoreError::DuplicateFeatureInSnapshot`] if the same feature name
+    /// appears more than once in `ordered_features`, or [`FeatureStoreError::VersionNotFound`]
+    /// if any `(name, version)` pair doesn't exist.
     pub fn create_snapshot(
         &mut self,
         ordered_features: Vec<(String, usize)>,

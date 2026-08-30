@@ -35,6 +35,8 @@ pub enum FeatureStoreError {
     SnapshotNotFound {
         id: SnapshotId,
     },
+    /// [`FeatureStore::create_snapshot`] was given `ordered_features` with the same feature
+    /// name listed more than once — a snapshot can only reference each feature at most once.
     DuplicateFeatureInSnapshot {
         name: String,
     },
