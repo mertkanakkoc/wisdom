@@ -40,6 +40,11 @@ pub enum FeatureStoreError {
     DuplicateFeatureInSnapshot {
         name: String,
     },
+    /// [`FeatureStore::reconstruct_table`] failed while adding a reconstructed column back to
+    /// the new [`Table`] (e.g. a duplicate name slipping past [`FeatureStore::create_snapshot`]'s
+    /// own check, or a row-count mismatch between features).
+    ///
+    /// [`Table`]: crate::models::table::Table
     TableBuildFailed(TableError),
 }
 

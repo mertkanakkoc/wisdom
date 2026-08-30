@@ -104,6 +104,25 @@ impl FeatureStore {
             .ok_or_else(|| FeatureStoreError::SnapshotNotFound { id: id.clone() })
     }
 
+    /// Rebuilds a fresh, standalone [`Table`] from a previously created [`Snapshot`], walking
+    /// `ordered_features` in order and adding each feature's recorded version as a column via
+    /// [`Table::add_column`].
+    ///
+    /// The returned `Table` is a brand-new copy — the underlying data is reconstructed from
+    /// each [`ColumnVersion`] (via [`ColumnData::select_rows`], since `Column<T>` isn't
+    /// `Clone`), so mutating it never affects the `FeatureStore`'s stored history.
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::SnapshotNotFound`] if `id` doesn't exist,
+    /// [`FeatureStoreError::VersionNotFound`] if a recorded `(name, version)` pair no longer
+    /// exists (e.g. pruned since the snapshot was created), or
+    /// [`FeatureStoreError::TableBuildFailed`] if adding a reconstructed column to the new
+    /// `Table` fails.
+    ///
+    /// [`Table`]: crate::models::table::Table
+    /// [`Table::add_column`]: crate::models::table::Table::add_column
+    /// [`ColumnVersion`]: crate::feature_store::ColumnVersion
+    /// [`ColumnData::select_rows`]: crate::models::table::ColumnData::select_rows
     pub fn reconstruct_table(&self, id: &SnapshotId) -> Result<Table, FeatureStoreError> {
         let snapshot = self.get_snapshot(id)?;
         let mut table = Table::default();
