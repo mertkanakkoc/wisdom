@@ -191,6 +191,7 @@ mod tests {
         let store = store.unwrap();
         assert_eq!(store.max_versions, 5);
         assert!(store.versions.is_empty());
+        assert!(store.snapshots.is_empty());
     }
 
     #[test]
