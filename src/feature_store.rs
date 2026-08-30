@@ -1,3 +1,4 @@
+mod drift;
 mod snapshot;
 
 use std::{collections::HashMap, time::SystemTime};
@@ -46,6 +47,20 @@ pub enum FeatureStoreError {
     ///
     /// [`Table`]: crate::models::table::Table
     TableBuildFailed(TableError),
+    /// [`FeatureStore::detect_drift`] was asked to compare a feature whose committed data is
+    /// [`ColumnData::Text`] or [`ColumnData::Raw`] — drift detection only supports the same
+    /// numeric types [`Table::to_tensor`] accepts (`Int`/`Float`/`Bool`).
+    ///
+    /// [`Table::to_tensor`]: crate::models::table::Table::to_tensor
+    NonNumericFeature {
+        name: String,
+    },
+    /// [`FeatureStore::detect_drift`] was asked to compare a version whose values are entirely
+    /// missing (`None`) — a mean/standard deviation can't be computed with zero present values.
+    AllValuesMissing {
+        name: String,
+        version: usize,
+    },
 }
 
 /// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.
@@ -81,7 +96,9 @@ pub struct ColumnVersion {
 ///
 /// On top of per-feature versioning, `FeatureStore` also lets a caller pin down a whole
 /// *combination* of feature versions as a single, content-addressed [`Snapshot`] (see
-/// [`FeatureStore::create_snapshot`]) — the unit a model is actually trained/served against.
+/// [`FeatureStore::create_snapshot`]) — the unit a model is actually trained/served against —
+/// and compare any two versions of the same feature for drift (see
+/// [`FeatureStore::detect_drift`]).
 ///
 /// [`Table`]: crate::models::table::Table
 pub struct FeatureStore {

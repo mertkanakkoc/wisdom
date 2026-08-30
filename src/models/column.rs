@@ -190,6 +190,11 @@ impl<T> Column<T> {
         Ok(format!("Elements removed from the column '{}'", self.name))
     }
 
+    /// Returns an iterator over only the present (non-`None`) values, in order.
+    pub fn present_values(&self) -> impl Iterator<Item = &T> {
+        self.data.iter().flatten()
+    }
+
     /// Registers a new named behavior: a closure that computes a [`BehaviorResult`] from the
     /// column's data, to be run later via [`Column::call_behavior`].
     ///
