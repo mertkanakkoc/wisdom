@@ -17,6 +17,27 @@ fn to_f64_vec(data: &ColumnData, name: &str) -> Result<Vec<f64>, FeatureStoreErr
 }
 
 impl FeatureStore {
+    /// Compares two committed versions of the same feature (`baseline_version` vs
+    /// `current_version`) and reports whether they've drifted apart by more than `threshold`.
+    ///
+    /// The drift score is the shift in mean between the two versions' present (non-missing)
+    /// values, normalized by the baseline's (population) standard deviation:
+    /// `|current_mean - baseline_mean| / baseline_std`. If `baseline_std` is `0` (every present
+    /// baseline value is identical), the plain absolute mean difference is used instead, to
+    /// avoid dividing by zero. Returns `true` if this score is greater than `threshold`.
+    ///
+    /// Only the same numeric types [`Table::to_tensor`] accepts (`Int`/`Float`/`Bool`) are
+    /// supported, matching what's actually trainable; `Int`/`Bool` values are cast to `f64`.
+    /// Missing values are skipped when computing the mean/standard deviation, not treated as
+    /// `0`.
+    ///
+    /// # Errors
+    /// Returns [`FeatureStoreError::VersionNotFound`] if either version doesn't exist,
+    /// [`FeatureStoreError::NonNumericFeature`] if the feature is [`ColumnData::Text`] or
+    /// [`ColumnData::Raw`], or [`FeatureStoreError::AllValuesMissing`] if either version's
+    /// values are entirely missing.
+    ///
+    /// [`Table::to_tensor`]: crate::models::table::Table::to_tensor
     pub fn detect_drift(
         &self,
         name: &str,
