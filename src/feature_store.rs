@@ -4,7 +4,7 @@ use std::{collections::HashMap, time::SystemTime};
 
 use crate::{
     feature_store::snapshot::{Snapshot, SnapshotId},
-    models::table::ColumnData,
+    models::table::{ColumnData, TableError},
 };
 
 /// Errors that can occur while creating or using a [`FeatureStore`].
@@ -40,6 +40,7 @@ pub enum FeatureStoreError {
     DuplicateFeatureInSnapshot {
         name: String,
     },
+    TableBuildFailed(TableError),
 }
 
 /// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.

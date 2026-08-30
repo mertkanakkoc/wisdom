@@ -2,7 +2,10 @@ use std::time::SystemTime;
 
 use sha2::{Digest, Sha256};
 
-use crate::feature_store::FeatureStoreError;
+use crate::{
+    feature_store::FeatureStoreError,
+    models::table::{ColumnData, Table},
+};
 
 use super::FeatureStore;
 
@@ -99,6 +102,35 @@ impl FeatureStore {
         self.snapshots
             .get(id)
             .ok_or_else(|| FeatureStoreError::SnapshotNotFound { id: id.clone() })
+    }
+
+    pub fn reconstruct_table(&self, id: &SnapshotId) -> Result<Table, FeatureStoreError> {
+        let snapshot = self.get_snapshot(id)?;
+        let mut table = Table::default();
+
+        for (name, version) in snapshot.ordered_features.iter() {
+            let column_version = self.get_version(name, *version)?;
+            let full_indices: Vec<usize> = (0..column_version.data.len()).collect();
+            let owned_data = column_version.data.select_rows(&full_indices);
+
+            match owned_data {
+                ColumnData::Int(c) => table
+                    .add_column(c)
+                    .map_err(FeatureStoreError::TableBuildFailed)?,
+                ColumnData::Float(c) => table
+                    .add_column(c)
+                    .map_err(FeatureStoreError::TableBuildFailed)?,
+                ColumnData::Text(c) => table
+                    .add_column(c)
+                    .map_err(FeatureStoreError::TableBuildFailed)?,
+                ColumnData::Bool(c) => table
+                    .add_column(c)
+                    .map_err(FeatureStoreError::TableBuildFailed)?,
+                ColumnData::Raw(_) => unreachable!("commit rejects Raw columns"),
+            };
+        }
+
+        Ok(table)
     }
 }
 
