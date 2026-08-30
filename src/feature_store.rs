@@ -13,28 +13,43 @@ use crate::{
 pub enum FeatureStoreError {
     /// [`FeatureStore::new`] was called with `max_versions < 2` — at least 2 is required so the
     /// permanently-kept first version and at least one more recent version can coexist.
-    MaxVersionsTooLow { min: usize, actual: usize },
+    MaxVersionsTooLow {
+        min: usize,
+        actual: usize,
+    },
     /// [`FeatureStore::commit`] was given a [`ColumnData::Raw`] value, which has no name of its
     /// own to commit under (see [`ColumnData::extract_name`]).
     RawColumnExists,
     /// The requested `(name, version)` pair doesn't exist — either the feature was never
     /// committed, or that specific version number doesn't exist for it (pruned or never
     /// existed). `version` always echoes back exactly what was asked for.
-    VersionNotFound { name: String, version: usize },
+    VersionNotFound {
+        name: String,
+        version: usize,
+    },
     /// [`FeatureStore::get_latest_version`] was called for a feature that was never committed.
-    FeatureNotFound { name: String },
+    FeatureNotFound {
+        name: String,
+    },
     /// [`FeatureStore::get_snapshot`] was called with an `id` that doesn't match any snapshot
     /// created by [`FeatureStore::create_snapshot`].
-    SnapshotNotFound { id: SnapshotId },
+    SnapshotNotFound {
+        id: SnapshotId,
+    },
     /// [`FeatureStore::create_snapshot`] was given `ordered_features` with the same feature
     /// name listed more than once — a snapshot can only reference each feature at most once.
-    DuplicateFeatureInSnapshot { name: String },
+    DuplicateFeatureInSnapshot {
+        name: String,
+    },
     /// [`FeatureStore::reconstruct_table`] failed while adding a reconstructed column back to
     /// the new [`Table`] (e.g. a duplicate name slipping past [`FeatureStore::create_snapshot`]'s
     /// own check, or a row-count mismatch between features).
     ///
     /// [`Table`]: crate::models::table::Table
     TableBuildFailed(TableError),
+    NonNumericFeature {
+        name: String,
+    },
 }
 
 /// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.
