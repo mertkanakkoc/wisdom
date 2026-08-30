@@ -62,3 +62,179 @@ impl FeatureStore {
         Ok(score > threshold)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{feature_store::Transformation, models::column::Column};
+
+    use super::*;
+
+    #[test]
+    fn detect_drift_returns_false_when_values_are_similar() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let baseline =
+            Column::new_from_parsed(vec![Some(1.0), Some(2.0), Some(3.0)], "age".to_string())
+                .unwrap();
+        let current =
+            Column::new_from_parsed(vec![Some(1.1), Some(2.1), Some(3.1)], "age".to_string())
+                .unwrap();
+        store
+            .commit(
+                ColumnData::Float(baseline),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        store
+            .commit(
+                ColumnData::Float(current),
+                Transformation::Custom("v2".to_string()),
+            )
+            .unwrap();
+
+        let result = store.detect_drift("age", 1, 2, 1.0);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn detect_drift_returns_true_when_values_shift_significantly() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let baseline =
+            Column::new_from_parsed(vec![Some(1.0), Some(2.0), Some(3.0)], "age".to_string())
+                .unwrap();
+        let current = Column::new_from_parsed(
+            vec![Some(100.0), Some(200.0), Some(300.0)],
+            "age".to_string(),
+        )
+        .unwrap();
+        store
+            .commit(
+                ColumnData::Float(baseline),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        store
+            .commit(
+                ColumnData::Float(current),
+                Transformation::Custom("v2".to_string()),
+            )
+            .unwrap();
+
+        let result = store.detect_drift("age", 1, 2, 1.0);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
+    }
+
+    #[test]
+    fn detect_drift_uses_absolute_difference_when_baseline_std_is_zero() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let baseline =
+            Column::new_from_parsed(vec![Some(5.0), Some(5.0), Some(5.0)], "age".to_string())
+                .unwrap();
+        let current =
+            Column::new_from_parsed(vec![Some(5.5), Some(5.5), Some(5.5)], "age".to_string())
+                .unwrap();
+        store
+            .commit(
+                ColumnData::Float(baseline),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        store
+            .commit(
+                ColumnData::Float(current),
+                Transformation::Custom("v2".to_string()),
+            )
+            .unwrap();
+
+        let result = store.detect_drift("age", 1, 2, 1.0);
+
+        // baseline_std == 0, diff = |5.5 - 5.0| = 0.5, threshold = 1.0
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn detect_drift_fails_for_non_numeric_feature() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let baseline =
+            Column::new_from_parsed(vec![Some("a".to_string())], "city".to_string()).unwrap();
+        let current =
+            Column::new_from_parsed(vec![Some("b".to_string())], "city".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Text(baseline),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        store
+            .commit(
+                ColumnData::Text(current),
+                Transformation::Custom("v2".to_string()),
+            )
+            .unwrap();
+
+        let result = store.detect_drift("city", 1, 2, 1.0);
+
+        match result {
+            Err(FeatureStoreError::NonNumericFeature { name }) => {
+                assert_eq!(name, "city".to_string());
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn detect_drift_fails_when_baseline_is_entirely_missing() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let baseline: Column<f64> =
+            Column::new_from_parsed(vec![None, None], "age".to_string()).unwrap();
+        let current = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(baseline),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        store
+            .commit(
+                ColumnData::Float(current),
+                Transformation::Custom("v2".to_string()),
+            )
+            .unwrap();
+
+        let result = store.detect_drift("age", 1, 2, 1.0);
+
+        match result {
+            Err(FeatureStoreError::AllValuesMissing { name, version }) => {
+                assert_eq!(name, "age");
+                assert_eq!(version, 1);
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn detect_drift_fails_for_nonexistent_version() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let baseline = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(baseline),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+
+        let result = store.detect_drift("age", 1, 2, 1.0);
+
+        match result {
+            Err(FeatureStoreError::VersionNotFound { name, version }) => {
+                assert_eq!(name, "age".to_string());
+                assert_eq!(version, 2);
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
+}
