@@ -277,4 +277,64 @@ mod tests {
             _ => panic!("Unexpected result."),
         }
     }
+
+    #[test]
+    fn reconstruct_table_succeeds_and_rebuilds_table() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column =
+            Column::new_from_parsed(vec![Some(1.0), Some(2.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("init".to_string()),
+            )
+            .unwrap();
+        let id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+
+        let result = store.reconstruct_table(&id);
+
+        assert!(result.is_ok());
+        let table = result.unwrap();
+        assert_eq!(table.row_count(), 2);
+        assert_eq!(table.column_count(), 1);
+    }
+
+    #[test]
+    fn reconstruct_table_preserves_column_values() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column =
+            Column::new_from_parsed(vec![Some(1.0), Some(2.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("init".to_string()),
+            )
+            .unwrap();
+        let id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+
+        let mut table = store.reconstruct_table(&id).unwrap();
+        let rebuilt_column = table.get_column::<f64>("age").unwrap();
+
+        assert_eq!(rebuilt_column.get(0), Some(&Some(1.0)));
+        assert_eq!(rebuilt_column.get(1), Some(&Some(2.0)));
+    }
+
+    #[test]
+    fn reconstruct_table_fails_for_unknown_snapshot() {
+        let store = FeatureStore::new(5).unwrap();
+        let fake_id = SnapshotId("does-not-exist".to_string());
+
+        let result = store.reconstruct_table(&fake_id);
+
+        match result {
+            Err(FeatureStoreError::SnapshotNotFound { id }) => {
+                assert_eq!(id, fake_id);
+            }
+            _ => panic!("Unexpected result."),
+        }
+    }
 }
