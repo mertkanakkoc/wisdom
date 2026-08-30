@@ -2,23 +2,37 @@ mod snapshot;
 
 use std::{collections::HashMap, time::SystemTime};
 
-use crate::models::table::ColumnData;
+use crate::{
+    feature_store::snapshot::{Snapshot, SnapshotId},
+    models::table::ColumnData,
+};
 
 /// Errors that can occur while creating or using a [`FeatureStore`].
 #[derive(Debug)]
 pub enum FeatureStoreError {
     /// [`FeatureStore::new`] was called with `max_versions < 2` — at least 2 is required so the
     /// permanently-kept first version and at least one more recent version can coexist.
-    MaxVersionsTooLow { min: usize, actual: usize },
+    MaxVersionsTooLow {
+        min: usize,
+        actual: usize,
+    },
     /// [`FeatureStore::commit`] was given a [`ColumnData::Raw`] value, which has no name of its
     /// own to commit under (see [`ColumnData::extract_name`]).
     RawColumnExists,
     /// The requested `(name, version)` pair doesn't exist — either the feature was never
     /// committed, or that specific version number doesn't exist for it (pruned or never
     /// existed). `version` always echoes back exactly what was asked for.
-    VersionNotFound { name: String, version: usize },
+    VersionNotFound {
+        name: String,
+        version: usize,
+    },
     /// [`FeatureStore::get_latest_version`] was called for a feature that was never committed.
-    FeatureNotFound { name: String },
+    FeatureNotFound {
+        name: String,
+    },
+    SnapshotNotFound {
+        id: SnapshotId,
+    },
 }
 
 /// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.
@@ -56,6 +70,7 @@ pub struct ColumnVersion {
 pub struct FeatureStore {
     versions: HashMap<String, Vec<ColumnVersion>>,
     max_versions: usize,
+    snapshots: HashMap<SnapshotId, Snapshot>,
 }
 
 impl FeatureStore {
@@ -77,6 +92,7 @@ impl FeatureStore {
         Ok(Self {
             versions: HashMap::new(),
             max_versions,
+            snapshots: HashMap::new(),
         })
     }
 
