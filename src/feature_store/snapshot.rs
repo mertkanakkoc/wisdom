@@ -200,6 +200,36 @@ mod tests {
     }
 
     #[test]
+    fn create_snapshot_fails_for_duplicate_feature_name() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column1 = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        let column2 = Column::new_from_parsed(vec![Some(2.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column1),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        store
+            .commit(
+                ColumnData::Float(column2),
+                Transformation::Custom("v2".to_string()),
+            )
+            .unwrap();
+
+        let result =
+            store.create_snapshot(vec![("age".to_string(), 1), ("age".to_string(), 2)], None);
+
+        match result {
+            Err(FeatureStoreError::DuplicateFeatureInSnapshot { name }) => {
+                assert_eq!(name, "age".to_string());
+            }
+            _ => panic!("Unexpected result."),
+        }
+        assert!(store.snapshots.is_empty());
+    }
+
+    #[test]
     fn get_snapshot_fails_for_unknown_id() {
         let store = FeatureStore::new(5).unwrap();
         let fake_id = SnapshotId("does-not-exist".to_string());
