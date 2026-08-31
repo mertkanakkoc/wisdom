@@ -74,3 +74,117 @@ impl ModelArtifact {
         self.timestamp
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        feature_store::{FeatureStore, Transformation},
+        models::{column::Column, table::ColumnData},
+    };
+
+    use super::*;
+
+    #[test]
+    fn model_artifact_new_succeeds_with_valid_label() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+        let architecture = ModelArchitecture::Linear {
+            in_features: 1,
+            out_features: 1,
+        };
+
+        let result = ModelArtifact::new(architecture, snapshot_id, "my-model_v1".to_string());
+
+        assert!(result.is_ok());
+        let artifact = result.unwrap();
+        assert_eq!(artifact.label(), "my-model_v1");
+    }
+
+    #[test]
+    fn model_artifact_new_fails_for_empty_label() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+        let architecture = ModelArchitecture::Linear {
+            in_features: 1,
+            out_features: 1,
+        };
+
+        let result = ModelArtifact::new(architecture, snapshot_id, "".to_string());
+
+        match result {
+            Err(ArtifactError::EmptyLabel) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn model_artifact_new_fails_for_too_long_label() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+        let architecture = ModelArchitecture::Linear {
+            in_features: 1,
+            out_features: 1,
+        };
+        let long_label = "a".repeat(99);
+
+        let result = ModelArtifact::new(architecture, snapshot_id, long_label);
+
+        match result {
+            Err(ArtifactError::LabelTooLong) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn model_artifact_new_fails_for_invalid_character() {
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+        let architecture = ModelArchitecture::Linear {
+            in_features: 1,
+            out_features: 1,
+        };
+
+        let result = ModelArtifact::new(architecture, snapshot_id, "bad/label".to_string());
+
+        match result {
+            Err(ArtifactError::InvalidCharacter) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
+}
