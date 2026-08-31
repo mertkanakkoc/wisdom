@@ -8,7 +8,7 @@ pub enum ModelArchitecture {
 }
 
 pub struct TrainingOutput<M> {
-    model: M,
-    varmap: VarMap,
-    architecture: ModelArchitecture,
+    pub model: M,
+    pub varmap: VarMap,
+    pub architecture: ModelArchitecture,
 }

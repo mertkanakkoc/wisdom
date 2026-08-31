@@ -1,6 +1,8 @@
 use candle_core::{Device, Tensor};
 use candle_nn::{AdamW, Linear, Module, Optimizer, ParamsAdamW, VarBuilder, VarMap, linear};
 
+use crate::ml::training::artifact::{ModelArchitecture, TrainingOutput};
+
 /// Trains a single-layer linear regression model (`y ≈ x·W + b`) on `x`/`y` — typically the
 /// tensors produced by [`crate::models::table::Table::to_tensor`] — using full-batch gradient
 /// descent with `AdamW`.
@@ -20,7 +22,7 @@ pub fn train_linear_regression(
     epochs: usize,
     learning_rate: f64,
     device: &Device,
-) -> candle_core::Result<Linear> {
+) -> candle_core::Result<TrainingOutput<Linear>> {
     let varmap = VarMap::new();
     let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, device);
 
@@ -38,7 +40,14 @@ pub fn train_linear_regression(
         opt.backward_step(&loss)?;
         println!("{step} {}", loss.to_vec0::<f32>()?);
     }
-    Ok(model)
+    Ok(TrainingOutput {
+        model,
+        varmap,
+        architecture: ModelArchitecture::Linear {
+            in_features,
+            out_features: 1,
+        },
+    })
 }
 
 #[cfg(test)]
@@ -51,9 +60,9 @@ mod tests {
         let x = Tensor::new(&[[1f32], [2.], [3.], [4.]], &device).unwrap();
         let y = Tensor::new(&[3f32, 5., 7., 9.], &device).unwrap();
 
-        let model = train_linear_regression(&x, &y, 100, 0.05, &device).unwrap();
+        let training_output = train_linear_regression(&x, &y, 100, 0.05, &device).unwrap();
 
-        let prdedictions = model.forward(&x).unwrap();
+        let prdedictions = training_output.model.forward(&x).unwrap();
         let y_reshaped = y.reshape((4, 1)).unwrap();
         let final_loss = prdedictions
             .sub(&y_reshaped)
