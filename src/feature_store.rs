@@ -13,34 +13,22 @@ use crate::{
 pub enum FeatureStoreError {
     /// [`FeatureStore::new`] was called with `max_versions < 2` — at least 2 is required so the
     /// permanently-kept first version and at least one more recent version can coexist.
-    MaxVersionsTooLow {
-        min: usize,
-        actual: usize,
-    },
+    MaxVersionsTooLow { min: usize, actual: usize },
     /// [`FeatureStore::commit`] was given a [`ColumnData::Raw`] value, which has no name of its
     /// own to commit under (see [`ColumnData::extract_name`]).
     RawColumnExists,
     /// The requested `(name, version)` pair doesn't exist — either the feature was never
     /// committed, or that specific version number doesn't exist for it (pruned or never
     /// existed). `version` always echoes back exactly what was asked for.
-    VersionNotFound {
-        name: String,
-        version: usize,
-    },
+    VersionNotFound { name: String, version: usize },
     /// [`FeatureStore::get_latest_version`] was called for a feature that was never committed.
-    FeatureNotFound {
-        name: String,
-    },
+    FeatureNotFound { name: String },
     /// [`FeatureStore::get_snapshot`] was called with an `id` that doesn't match any snapshot
     /// created by [`FeatureStore::create_snapshot`].
-    SnapshotNotFound {
-        id: SnapshotId,
-    },
+    SnapshotNotFound { id: SnapshotId },
     /// [`FeatureStore::create_snapshot`] was given `ordered_features` with the same feature
     /// name listed more than once — a snapshot can only reference each feature at most once.
-    DuplicateFeatureInSnapshot {
-        name: String,
-    },
+    DuplicateFeatureInSnapshot { name: String },
     /// [`FeatureStore::reconstruct_table`] failed while adding a reconstructed column back to
     /// the new [`Table`] (e.g. a duplicate name slipping past [`FeatureStore::create_snapshot`]'s
     /// own check, or a row-count mismatch between features).
@@ -52,15 +40,10 @@ pub enum FeatureStoreError {
     /// numeric types [`Table::to_tensor`] accepts (`Int`/`Float`/`Bool`).
     ///
     /// [`Table::to_tensor`]: crate::models::table::Table::to_tensor
-    NonNumericFeature {
-        name: String,
-    },
+    NonNumericFeature { name: String },
     /// [`FeatureStore::detect_drift`] was asked to compare a version whose values are entirely
     /// missing (`None`) — a mean/standard deviation can't be computed with zero present values.
-    AllValuesMissing {
-        name: String,
-        version: usize,
-    },
+    AllValuesMissing { name: String, version: usize },
 }
 
 /// The lineage record attached to a committed [`ColumnVersion`] — what was done to produce it.
@@ -84,6 +67,28 @@ pub struct ColumnVersion {
     name: String,
     transformation: Transformation,
     timestamp: SystemTime,
+}
+
+impl ColumnVersion {
+    pub fn data(&self) -> &ColumnData {
+        &self.data
+    }
+
+    pub fn version_number(&self) -> usize {
+        self.version_number
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn transformation(&self) -> &Transformation {
+        &self.transformation
+    }
+
+    pub fn timestamp(&self) -> SystemTime {
+        self.timestamp
+    }
 }
 
 /// A version history and lineage store for features (columns), separate from [`Table`]'s live,

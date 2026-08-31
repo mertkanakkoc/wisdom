@@ -34,6 +34,24 @@ pub struct Snapshot {
     label: Option<String>,
 }
 
+impl Snapshot {
+    pub fn id(&self) -> &SnapshotId {
+        &self.id
+    }
+
+    pub fn ordered_features(&self) -> &[(String, usize)] {
+        &self.ordered_features
+    }
+
+    pub fn timestamp(&self) -> SystemTime {
+        self.timestamp
+    }
+
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+}
+
 fn compute_snapshot_id(ordered_features: &[(String, usize)]) -> SnapshotId {
     let mut hasher = Sha256::new();
     for (name, version) in ordered_features.iter() {
