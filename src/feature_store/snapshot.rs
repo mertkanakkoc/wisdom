@@ -35,18 +35,23 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// This snapshot's content-addressed identifier.
     pub fn id(&self) -> &SnapshotId {
         &self.id
     }
 
+    /// The `(feature name, version)` pairs this snapshot pins down, in the order they were
+    /// given to [`FeatureStore::create_snapshot`].
     pub fn ordered_features(&self) -> &[(String, usize)] {
         &self.ordered_features
     }
 
+    /// When this snapshot was created.
     pub fn timestamp(&self) -> SystemTime {
         self.timestamp
     }
 
+    /// The optional human-readable tag given to this snapshot at creation time, if any.
     pub fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }

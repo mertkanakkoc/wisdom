@@ -70,22 +70,27 @@ pub struct ColumnVersion {
 }
 
 impl ColumnVersion {
+    /// The feature's data as it stood at this version.
     pub fn data(&self) -> &ColumnData {
         &self.data
     }
 
+    /// This version's number (auto-incremented per feature name, starting at 1).
     pub fn version_number(&self) -> usize {
         self.version_number
     }
 
+    /// The feature's name, as it was at commit time (see [`FeatureStore::commit`]).
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// The [`Transformation`] recorded for this version at commit time.
     pub fn transformation(&self) -> &Transformation {
         &self.transformation
     }
 
+    /// When this version was committed.
     pub fn timestamp(&self) -> SystemTime {
         self.timestamp
     }
