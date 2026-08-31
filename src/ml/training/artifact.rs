@@ -5,6 +5,7 @@ use candle_nn::VarMap;
 
 pub const MAX_LABEL_CHARACTER: usize = 64;
 
+#[derive(Debug)]
 pub enum ArtifactError {
     EmptyLabel,
     LabelTooLong,
