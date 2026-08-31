@@ -1,5 +1,5 @@
 use candle_core::Device;
-use wisdom::ml::training::linear_reg::train_linear_regression;
+use wisdom::ml::training::train_linear_regression;
 use wisdom::models::column::Column;
 use wisdom::models::table::Table;
 
