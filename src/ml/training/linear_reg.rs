@@ -15,7 +15,10 @@ use crate::ml::training::artifact::{ModelArchitecture, TrainingOutput};
 /// out of this database, not a tuned or reusable model-training API. Prints each epoch's loss to
 /// stdout.
 ///
-/// Returns the trained `candle_nn::Linear` layer, ready to call `.forward()` on for predictions.
+/// Returns a [`TrainingOutput`] bundling the trained `candle_nn::Linear` layer (ready to call
+/// `.forward()` on for predictions), its backing `VarMap` (for persisting the weights via
+/// [`crate::ml::training::artifact::ModelArtifact::save`]), and a [`ModelArchitecture`]
+/// describing this model's shape (`Linear { in_features, out_features: 1 }`).
 pub fn train_linear_regression(
     x: &Tensor,
     y: &Tensor,

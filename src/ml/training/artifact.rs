@@ -4,18 +4,40 @@ use crate::feature_store::SnapshotId;
 use candle_nn::VarMap;
 use serde::{Deserialize, Serialize};
 
+/// The maximum number of characters allowed in a [`ModelArtifact`]'s `label` (see
+/// [`ModelArtifact::new`]) — kept well under common filesystem filename limits even after
+/// accounting for the fixed-length [`SnapshotId`] and file extension that share the same
+/// filename.
 pub const MAX_LABEL_CHARACTER: usize = 64;
 
+/// Errors that can occur while creating or saving a [`ModelArtifact`].
 #[derive(Debug)]
 pub enum ArtifactError {
+    /// [`ModelArtifact::new`] was given an empty `label`.
     EmptyLabel,
+    /// [`ModelArtifact::new`] was given a `label` longer than [`MAX_LABEL_CHARACTER`].
     LabelTooLong,
+    /// [`ModelArtifact::new`] was given a `label` containing a character other than ASCII
+    /// letters, digits, `-`, or `_` — `label` becomes part of a filename (see
+    /// [`ModelArtifact::save`]), so only filesystem-safe characters are allowed.
     InvalidCharacter,
+    /// [`ModelArtifact::save`] failed while writing the model's weights (via
+    /// [`candle_nn::VarMap::save`]).
     WeightsSaveFailed(candle_core::Error),
+    /// [`ModelArtifact::save`] failed while creating the metadata file on disk.
     FileCreationFailed(std::io::Error),
+    /// [`ModelArtifact::save`] failed while writing the metadata file's JSON contents.
     SerializationFailed(serde_json::Error),
 }
 
+/// Describes a model's shape — what's needed to rebuild a same-shaped, untrained model before
+/// loading saved weights into it (`candle_nn::VarMap::load` fills in *already-declared*
+/// variables; it doesn't recreate the architecture that produced them).
+///
+/// One variant per known model type, in the same spirit as [`Transformation`] — new variants
+/// are added only once a real second model type exists, not speculatively.
+///
+/// [`Transformation`]: crate::feature_store::Transformation
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ModelArchitecture {
     Linear {
@@ -24,12 +46,27 @@ pub enum ModelArchitecture {
     },
 }
 
+/// Everything [`crate::ml::training::train_linear_regression`] produces, bundled together:
+/// the trained, ready-to-use model itself (`model`), its backing [`VarMap`] (needed to persist
+/// the weights via [`ModelArtifact::save`]), and its [`ModelArchitecture`] (needed to rebuild
+/// the same shape when loading it back later).
+///
+/// Generic over the model type `M` so future training functions (e.g. for a second model type)
+/// can reuse this same shape.
 pub struct TrainingOutput<M> {
     pub model: M,
     pub varmap: VarMap,
     pub architecture: ModelArchitecture,
 }
 
+/// A persisted, reloadable record of a trained model — the metadata half of what
+/// [`ModelArtifact::save`] writes to disk (the weights themselves live in a separate
+/// `.safetensors` file, written via [`VarMap::save`]).
+///
+/// Ties a model back to the exact [`Snapshot`](crate::feature_store::Snapshot) (via
+/// [`SnapshotId`]) it was trained against, so it can later be reconstructed and matched with
+/// the right feature data. `label` is a caller-chosen, filesystem-safe name (see
+/// [`ModelArtifact::new`]) used together with the `snapshot_id` to name the saved files.
 #[derive(Serialize, Deserialize)]
 pub struct ModelArtifact {
     architecture: ModelArchitecture,
@@ -40,6 +77,14 @@ pub struct ModelArtifact {
 }
 
 impl ModelArtifact {
+    /// Creates a new `ModelArtifact` record, validating `label` in the process. `timestamp` is
+    /// set to the current time automatically.
+    ///
+    /// # Errors
+    /// Returns [`ArtifactError::EmptyLabel`] if `label` is empty,
+    /// [`ArtifactError::LabelTooLong`] if it's longer than [`MAX_LABEL_CHARACTER`], or
+    /// [`ArtifactError::InvalidCharacter`] if it contains anything other than ASCII
+    /// letters/digits, `-`, or `_`.
     pub fn new(
         architecture: ModelArchitecture,
         snapshot_id: SnapshotId,
@@ -65,22 +110,38 @@ impl ModelArtifact {
         })
     }
 
+    /// This artifact's model shape.
     pub fn architecture(&self) -> &ModelArchitecture {
         &self.architecture
     }
 
+    /// The [`Snapshot`](crate::feature_store::Snapshot) this model was trained against.
     pub fn snapshot_id(&self) -> &SnapshotId {
         &self.snapshot_id
     }
 
+    /// This artifact's caller-chosen, filesystem-safe label.
     pub fn label(&self) -> &str {
         &self.label
     }
 
+    /// When this artifact was created.
     pub fn timestamp(&self) -> SystemTime {
         self.timestamp
     }
 
+    /// Writes this artifact to `dir`, as two files named `{snapshot_id}_{label}.safetensors`
+    /// (the model's weights, via [`VarMap::save`]) and `{snapshot_id}_{label}.json` (this
+    /// artifact's own metadata, via `serde_json`).
+    ///
+    /// The weights file is written *before* the metadata file — a reader can treat the presence
+    /// of the metadata file as confirmation that the pair is complete, since a crash between
+    /// the two writes leaves only the (harmless, ignorable) weights file behind.
+    ///
+    /// # Errors
+    /// Returns [`ArtifactError::WeightsSaveFailed`] if writing the weights fails,
+    /// [`ArtifactError::FileCreationFailed`] if the metadata file can't be created, or
+    /// [`ArtifactError::SerializationFailed`] if writing the metadata file's JSON fails.
     pub fn save(&self, varmap: &VarMap, dir: &Path) -> Result<String, ArtifactError> {
         let file_name = format!("{}_{}", self.snapshot_id, self.label);
         let varmap_file_name = dir.join(format!("{}.safetensors", file_name));
