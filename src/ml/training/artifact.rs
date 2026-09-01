@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{path::Path, time::SystemTime};
 
 use crate::feature_store::SnapshotId;
 use candle_nn::VarMap;
@@ -11,6 +11,9 @@ pub enum ArtifactError {
     EmptyLabel,
     LabelTooLong,
     InvalidCharacter,
+    WeightsSaveFailed(candle_core::Error),
+    FileCreationFailed(std::io::Error),
+    SerializationFailed(serde_json::Error),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,6 +79,22 @@ impl ModelArtifact {
 
     pub fn timestamp(&self) -> SystemTime {
         self.timestamp
+    }
+
+    pub fn save(&self, varmap: &VarMap, dir: &Path) -> Result<String, ArtifactError> {
+        let file_name = format!("{}_{}", self.snapshot_id, self.label);
+        let varmap_file_name = dir.join(format!("{}.safetensors", file_name));
+        let artifact_file_name = dir.join(format!("{}.json", file_name));
+
+        varmap
+            .save(varmap_file_name)
+            .map_err(ArtifactError::WeightsSaveFailed)?;
+
+        let artifact_file = std::fs::File::create(&artifact_file_name)
+            .map_err(ArtifactError::FileCreationFailed)?;
+
+        serde_json::to_writer(artifact_file, self).map_err(ArtifactError::SerializationFailed)?;
+        Ok(format!("Model information saved."))
     }
 }
 
