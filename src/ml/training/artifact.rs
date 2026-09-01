@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::feature_store::SnapshotId;
 use candle_nn::VarMap;
@@ -11,6 +11,7 @@ pub enum ArtifactError {
     EmptyLabel,
     LabelTooLong,
     InvalidCharacter,
+    TimeSerializationError,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,6 +33,7 @@ pub struct ModelArtifact {
     architecture: ModelArchitecture,
     snapshot_id: SnapshotId,
     label: String,
+    #[serde(with = "unix_seconds")]
     timestamp: SystemTime,
 }
 
@@ -75,6 +77,29 @@ impl ModelArtifact {
 
     pub fn timestamp(&self) -> SystemTime {
         self.timestamp
+    }
+}
+
+mod unix_seconds {
+    use serde::ser::Error as _;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let duration = time.duration_since(UNIX_EPOCH).map_err(S::Error::custom)?;
+        let seconds = duration.as_secs();
+        serializer.serialize_u64(seconds)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let seconds = u64::deserialize(deserializer)?;
+        Ok(UNIX_EPOCH + Duration::from_secs(seconds))
     }
 }
 
