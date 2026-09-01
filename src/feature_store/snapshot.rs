@@ -18,6 +18,12 @@ use super::FeatureStore;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SnapshotId(String);
 
+impl std::fmt::Display for SnapshotId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A named, ordered combination of feature versions — the "dataset version" a model is actually
 /// trained or served against, as opposed to [`ColumnVersion`]'s per-feature history.
 ///
