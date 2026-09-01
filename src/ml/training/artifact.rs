@@ -123,6 +123,10 @@ mod unix_seconds {
 
 #[cfg(test)]
 mod tests {
+    use candle_core::{Device, Tensor};
+
+    use crate::ml::training::train_linear_regression;
+
     use crate::{
         feature_store::{FeatureStore, Transformation},
         models::{column::Column, table::ColumnData},
@@ -230,6 +234,85 @@ mod tests {
 
         match result {
             Err(ArtifactError::InvalidCharacter) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn save_writes_weights_and_metadata_files() {
+        let device = Device::Cpu;
+        let x = Tensor::new(&[[1f32], [2.], [3.], [4.]], &device).unwrap();
+        let y = Tensor::new(&[3f32, 5., 7., 9.], &device).unwrap();
+        let training_output = train_linear_regression(&x, &y, 5, 0.05, &device).unwrap();
+
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+
+        let artifact = ModelArtifact::new(
+            training_output.architecture,
+            snapshot_id,
+            "test-model".to_string(),
+        )
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let result = artifact.save(&training_output.varmap, temp_dir.path());
+
+        assert!(result.is_ok());
+        let weights_path = temp_dir.path().join(format!(
+            "{}_{}.safetensors",
+            artifact.snapshot_id(),
+            artifact.label()
+        ));
+        let metadata_path = temp_dir.path().join(format!(
+            "{}_{}.json",
+            artifact.snapshot_id(),
+            artifact.label()
+        ));
+        assert!(weights_path.exists());
+        assert!(metadata_path.exists());
+    }
+
+    #[test]
+    fn save_fails_when_directory_does_not_exist() {
+        let device = Device::Cpu;
+        let x = Tensor::new(&[[1f32], [2.], [3.], [4.]], &device).unwrap();
+        let y = Tensor::new(&[3f32, 5., 7., 9.], &device).unwrap();
+        let training_output = train_linear_regression(&x, &y, 5, 0.05, &device).unwrap();
+
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+
+        let artifact = ModelArtifact::new(
+            training_output.architecture,
+            snapshot_id,
+            "test-model".to_string(),
+        )
+        .unwrap();
+
+        let bad_dir = std::path::Path::new("/this/does/not/exist/at/all");
+        let result = artifact.save(&training_output.varmap, bad_dir);
+
+        match result {
+            Err(ArtifactError::WeightsSaveFailed(_)) => {}
             _ => panic!("Unexpected result."),
         }
     }
