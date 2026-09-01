@@ -1,5 +1,6 @@
 use std::time::SystemTime;
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -14,7 +15,7 @@ use super::FeatureStore;
 /// [`FeatureStore::create_snapshot`]). The same combination, given in the same order, always
 /// produces the same `SnapshotId`; a different order produces a different one, since feature
 /// order is significant for reconstructing the exact tensor layout a model was trained on.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SnapshotId(String);
 
 /// A named, ordered combination of feature versions — the "dataset version" a model is actually

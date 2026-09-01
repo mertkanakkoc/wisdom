@@ -2,6 +2,7 @@ use std::time::SystemTime;
 
 use crate::feature_store::SnapshotId;
 use candle_nn::VarMap;
+use serde::{Deserialize, Serialize};
 
 pub const MAX_LABEL_CHARACTER: usize = 64;
 
@@ -12,6 +13,7 @@ pub enum ArtifactError {
     InvalidCharacter,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ModelArchitecture {
     Linear {
         in_features: usize,
@@ -25,6 +27,7 @@ pub struct TrainingOutput<M> {
     pub architecture: ModelArchitecture,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ModelArtifact {
     architecture: ModelArchitecture,
     snapshot_id: SnapshotId,
