@@ -1,4 +1,4 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use crate::feature_store::SnapshotId;
 use candle_nn::VarMap;
@@ -11,7 +11,6 @@ pub enum ArtifactError {
     EmptyLabel,
     LabelTooLong,
     InvalidCharacter,
-    TimeSerializationError,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
