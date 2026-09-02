@@ -1,7 +1,8 @@
-use std::{path::Path, time::SystemTime};
+use std::{io::BufReader, path::Path, time::SystemTime};
 
 use crate::feature_store::SnapshotId;
-use candle_nn::VarMap;
+use candle_core::Device;
+use candle_nn::{Linear, VarBuilder, VarMap, linear};
 use serde::{Deserialize, Serialize};
 
 /// The maximum number of characters allowed in a [`ModelArtifact`]'s `label` (see
@@ -28,6 +29,10 @@ pub enum ArtifactError {
     FileCreationFailed(std::io::Error),
     /// [`ModelArtifact::save`] failed while writing the metadata file's JSON contents.
     SerializationFailed(serde_json::Error),
+    DeserializationFailed(serde_json::Error),
+    ArtifactFileOpenFailed(std::io::Error),
+    WeightsLoadedFailed(candle_core::Error),
+    ModelCreationFailed(candle_core::Error),
 }
 
 /// Describes a model's shape — what's needed to rebuild a same-shaped, untrained model before
@@ -46,6 +51,9 @@ pub enum ModelArchitecture {
     },
 }
 
+pub enum LoadedModel {
+    Linear(Linear),
+}
 /// Everything [`crate::ml::training::train_linear_regression`] produces, bundled together:
 /// the trained, ready-to-use model itself (`model`), its backing [`VarMap`] (needed to persist
 /// the weights via [`ModelArtifact::save`]), and its [`ModelArchitecture`] (needed to rebuild
@@ -156,6 +164,39 @@ impl ModelArtifact {
 
         serde_json::to_writer(artifact_file, self).map_err(ArtifactError::SerializationFailed)?;
         Ok(format!("Model information saved."))
+    }
+
+    pub fn load(
+        snapshot_id: &SnapshotId,
+        label: &str,
+        dir: &Path,
+        device: &Device,
+    ) -> Result<(LoadedModel, ModelArtifact), ArtifactError> {
+        let file_name = format!("{}_{}", snapshot_id, label);
+        let varmap_file_name = dir.join(format!("{}.safetensors", file_name));
+        let artifact_file_name = dir.join(format!("{}.json", file_name));
+
+        let artifact_file = std::fs::File::open(artifact_file_name)
+            .map_err(ArtifactError::ArtifactFileOpenFailed)?;
+        let reader = BufReader::new(artifact_file);
+        let model_artifact: ModelArtifact =
+            serde_json::from_reader(reader).map_err(ArtifactError::DeserializationFailed)?;
+
+        match model_artifact.architecture() {
+            ModelArchitecture::Linear {
+                in_features,
+                out_features,
+            } => {
+                let mut varmap = VarMap::new();
+                let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, device);
+                let linear_model = linear(*in_features, *out_features, vb.pp("linear"))
+                    .map_err(ArtifactError::ModelCreationFailed)?;
+                varmap
+                    .load(varmap_file_name)
+                    .map_err(ArtifactError::WeightsLoadedFailed)?;
+                Ok((LoadedModel::Linear(linear_model), model_artifact))
+            }
+        }
     }
 }
 
