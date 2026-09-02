@@ -228,6 +228,7 @@ mod tests {
     use candle_core::{Device, Tensor};
 
     use crate::ml::training::train_linear_regression;
+    use candle_nn::Module;
 
     use crate::{
         feature_store::{FeatureStore, Transformation},
@@ -415,6 +416,85 @@ mod tests {
 
         match result {
             Err(ArtifactError::WeightsSaveFailed(_)) => {}
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn load_restores_the_saved_model_and_metadata() {
+        let device = Device::Cpu;
+        let x = Tensor::new(&[[1f32], [2.], [3.], [4.]], &device).unwrap();
+        let y = Tensor::new(&[3f32, 5., 7., 9.], &device).unwrap();
+        let training_output = train_linear_regression(&x, &y, 5, 0.05, &device).unwrap();
+        let original_predictions = training_output.model.forward(&x).unwrap();
+
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+
+        let artifact = ModelArtifact::new(
+            training_output.architecture,
+            snapshot_id.clone(),
+            "test-model".to_string(),
+        )
+        .unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        artifact
+            .save(&training_output.varmap, temp_dir.path())
+            .unwrap();
+
+        let result = ModelArtifact::load(&snapshot_id, "test-model", temp_dir.path(), &device);
+
+        assert!(result.is_ok());
+        let (loaded_model, loaded_artifact) = result.unwrap();
+        assert_eq!(loaded_artifact.label(), "test-model".to_string());
+        assert_eq!(loaded_artifact.snapshot_id(), &snapshot_id);
+
+        match loaded_model {
+            LoadedModel::Linear(linear) => {
+                let loaded_predictions = linear.forward(&x).unwrap();
+                let diff = (loaded_predictions - original_predictions)
+                    .unwrap()
+                    .abs()
+                    .unwrap()
+                    .sum_all()
+                    .unwrap()
+                    .to_vec0::<f32>()
+                    .unwrap();
+                assert!(diff < 0.0001);
+            }
+        }
+    }
+
+    #[test]
+    fn load_fails_when_metadata_file_does_not_exist() {
+        let device = Device::Cpu;
+        let mut store = FeatureStore::new(5).unwrap();
+        let column = Column::new_from_parsed(vec![Some(1.0)], "age".to_string()).unwrap();
+        store
+            .commit(
+                ColumnData::Float(column),
+                Transformation::Custom("v1".to_string()),
+            )
+            .unwrap();
+        let snapshot_id = store
+            .create_snapshot(vec![("age".to_string(), 1)], None)
+            .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let result =
+            ModelArtifact::load(&snapshot_id, "nonexistent-label", temp_dir.path(), &device);
+
+        match result {
+            Err(ArtifactError::ArtifactFileOpenFailed(_)) => {}
             _ => panic!("Unexpected result."),
         }
     }
