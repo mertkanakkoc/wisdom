@@ -70,6 +70,22 @@ pub fn run_inference_from_snapshot(
     run(loaded_model, &x)
 }
 
+/// Runs inference (scenario "B" — live, over a single brand-new observation) for one row of
+/// caller-supplied `values`, keyed by feature name rather than position — so the caller never
+/// has to remember or re-derive the order the model expects; `feature_names` (typically a
+/// model's associated snapshot's own recorded order, fetched once and reused across many calls)
+/// says what order to assemble them in and which names are required.
+///
+/// Still purely in-process/synchronous — accepting live, previously-uncommitted values here
+/// doesn't require a network layer (that's Faz 6's job, not this function's); it's just a plain
+/// function call.
+///
+/// # Errors
+/// Returns [`InferenceError::MissingFeature`] if `values` is missing an entry for one of
+/// `feature_names`, [`InferenceError::UnexpectedFeature`] if `values` has more entries than
+/// `feature_names` (extra, unrecognized features), [`InferenceError::TensorCreationFailed`] if
+/// building the input tensor fails, or [`InferenceError::ForwardFailed`] if the model itself
+/// fails.
 pub fn run_inference_from_values(
     loaded_model: &LoadedModel,
     feature_names: &[String],
