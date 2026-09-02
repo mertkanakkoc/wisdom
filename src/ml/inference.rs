@@ -9,17 +9,44 @@ use crate::{
     models::table::TableError,
 };
 
+/// Errors that can occur while running inference.
 #[derive(Debug)]
 pub enum InferenceError {
+    /// [`run_inference_from_snapshot`] failed while rebuilding a [`Table`](crate::models::table::Table)
+    /// from the given snapshot (via [`FeatureStore::reconstruct_table`]).
     TableReconstructionFailed(FeatureStoreError),
+    /// [`run_inference_from_snapshot`] failed while looking up the snapshot itself (via
+    /// [`FeatureStore::get_snapshot`]) to recover its feature order.
     SnapshotReconstructionFailed(FeatureStoreError),
+    /// [`run_inference_from_snapshot`] failed while converting the reconstructed table's
+    /// columns into a tensor (via [`Table::to_feature_tensor`](crate::models::table::Table::to_feature_tensor)).
     FeatureTensorFailed(TableError),
+    /// The loaded model's own `.forward()` call failed.
     ForwardFailed(candle_core::Error),
+    /// [`run_inference_from_values`] was missing a value for a feature the model requires.
     MissingFeature { name: String },
+    /// [`run_inference_from_values`] was given a value for a feature the model doesn't expect.
     UnexpectedFeature,
+    /// [`run_inference_from_values`] failed while building the input tensor from the given
+    /// values.
     TensorCreationFailed(candle_core::Error),
 }
 
+/// Runs inference (scenario "A" — batch, over already-known data) against every row of the
+/// [`Snapshot`](crate::feature_store::Snapshot) named by `snapshot_id`: reconstructs a `Table`
+/// from it (via [`FeatureStore::reconstruct_table`]), converts it to a tensor in the snapshot's
+/// own recorded feature order (via `to_feature_tensor`, not `to_tensor` — there's no known
+/// target to supply here), and runs the model on it.
+///
+/// Suited to scoring/evaluating a model against data the [`FeatureStore`] already holds, as
+/// opposed to [`run_inference_from_values`], which predicts from brand-new values the caller
+/// supplies directly.
+///
+/// # Errors
+/// Returns [`InferenceError::TableReconstructionFailed`] or
+/// [`InferenceError::SnapshotReconstructionFailed`] if reading the snapshot fails,
+/// [`InferenceError::FeatureTensorFailed`] if building the tensor fails, or
+/// [`InferenceError::ForwardFailed`] if the model itself fails.
 pub fn run_inference_from_snapshot(
     loaded_model: &LoadedModel,
     feature_store: &FeatureStore,
