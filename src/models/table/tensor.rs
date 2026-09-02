@@ -161,6 +161,26 @@ impl Table {
         Ok((tensor_x, tensor_y))
     }
 
+    /// Converts the given columns into a single `candle` tensor of shape `(row_count,
+    /// feature_columns.len())`, without requiring (or producing) a target — unlike
+    /// [`Table::to_tensor`], which is built for training and always needs a known `y`.
+    ///
+    /// Intended for inference: scoring already-known data (e.g. reconstructed from a
+    /// [`FeatureStore`](crate::feature_store::FeatureStore) snapshot) or predicting from
+    /// brand-new, not-yet-committed values, in either case where the true target isn't
+    /// available to hand `to_tensor`. Values are read in `feature_columns`' order and cast to
+    /// `f32` (`Bool` becomes `1.0`/`0.0`); the underlying table is only borrowed, not consumed
+    /// or checked out.
+    ///
+    /// Every named column must already be materialized to `Int`/`Float`/`Bool` — a column still
+    /// sitting as [`ColumnData::Raw`] is rejected as [`TableError::NonNumericColumn`], same as
+    /// `to_tensor`.
+    ///
+    /// # Errors
+    /// Returns [`TableError::ColumnNotFound`] if any named column doesn't exist,
+    /// [`TableError::NonNumericColumn`] if any named column is `Text`/`Raw`,
+    /// [`TableError::MissingValuesPresent`] if any named column has a missing value, or
+    /// [`TableError::TensorCreationFailed`] if `candle` itself rejects the resulting data/shape.
     pub fn to_feature_tensor(
         &self,
         feature_columns: Vec<String>,
