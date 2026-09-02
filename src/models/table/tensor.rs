@@ -161,6 +161,82 @@ impl Table {
         Ok((tensor_x, tensor_y))
     }
 
+    pub fn to_feature_tensor(
+        &self,
+        feature_columns: Vec<String>,
+        device: &Device,
+    ) -> Result<Tensor, TableError> {
+        if let Err(e) = self.check_missing_and_type(&feature_columns) {
+            return Err(e);
+        }
+
+        let mut vec_for_tensor: Vec<f32> = vec![];
+        let mut columns_for_tensor: Vec<&ColumnData> = vec![];
+
+        for feature_name in feature_columns.iter() {
+            columns_for_tensor.push({
+                self.data
+                    .get(feature_name)
+                    .ok_or_else(|| TableError::ColumnNotFound {
+                        name: feature_name.clone(),
+                    })?
+            });
+        }
+
+        let row_count = self.row_count();
+        for i in 0..row_count {
+            for (index, name) in feature_columns.iter().enumerate() {
+                let from_table: &ColumnData = columns_for_tensor[index];
+                match from_table {
+                    ColumnData::Raw(_) | ColumnData::Text(_) => {
+                        return Err(TableError::NonNumericColumn { name: name.clone() });
+                    }
+                    ColumnData::Bool(column) => {
+                        vec_for_tensor.push(match column.get(i) {
+                            Some(Some(x)) => {
+                                if *x {
+                                    1.0_f32
+                                } else {
+                                    0.0_f32
+                                }
+                            }
+                            _ => {
+                                return Err(TableError::MissingValuesPresent {
+                                    name: name.clone(),
+                                });
+                            }
+                        });
+                    }
+                    ColumnData::Int(column) => {
+                        vec_for_tensor.push(match column.get(i) {
+                            Some(Some(x)) => *x as f32,
+                            _ => {
+                                return Err(TableError::MissingValuesPresent {
+                                    name: name.clone(),
+                                });
+                            }
+                        });
+                    }
+                    ColumnData::Float(column) => {
+                        vec_for_tensor.push(match column.get(i) {
+                            Some(Some(x)) => *x as f32,
+                            _ => {
+                                return Err(TableError::MissingValuesPresent {
+                                    name: name.clone(),
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
+        let feature_tensor =
+            Tensor::from_vec(vec_for_tensor, (row_count, feature_columns.len()), device)
+                .map_err(TableError::TensorCreationFailed)?;
+        Ok(feature_tensor)
+    }
+
     fn check_missing_and_type(&self, columns: &[String]) -> Result<(), TableError> {
         for name in columns.iter() {
             let from_table = self
