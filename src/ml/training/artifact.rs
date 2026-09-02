@@ -29,9 +29,16 @@ pub enum ArtifactError {
     FileCreationFailed(std::io::Error),
     /// [`ModelArtifact::save`] failed while writing the metadata file's JSON contents.
     SerializationFailed(serde_json::Error),
+    /// [`ModelArtifact::load`] failed while parsing the metadata file's JSON contents.
     DeserializationFailed(serde_json::Error),
+    /// [`ModelArtifact::load`] failed to open the metadata file (e.g. no artifact exists for
+    /// the given `snapshot_id`/`label` pair in the given directory).
     ArtifactFileOpenFailed(std::io::Error),
+    /// [`ModelArtifact::load`] failed while reading the weights file (via
+    /// [`candle_nn::VarMap::load`]).
     WeightsLoadedFailed(candle_core::Error),
+    /// [`ModelArtifact::load`] failed while rebuilding the untrained, same-shaped model (e.g.
+    /// via [`candle_nn::linear()`]) that the saved weights are loaded into.
     ModelCreationFailed(candle_core::Error),
 }
 
@@ -51,6 +58,13 @@ pub enum ModelArchitecture {
     },
 }
 
+/// A model reconstructed by [`ModelArtifact::load`], tagged by which concrete type it turned
+/// out to be.
+///
+/// One variant per known model type, growing in step with [`ModelArchitecture`] — kept separate
+/// from `ModelArchitecture` itself (which only describes *shape*, not real weight values) so
+/// that saving a [`ModelArtifact`]'s metadata to JSON never accidentally tries to serialize an
+/// actual `Tensor` (which `candle` doesn't support anyway) into the wrong file.
 pub enum LoadedModel {
     Linear(Linear),
 }
@@ -166,6 +180,25 @@ impl ModelArtifact {
         Ok(format!("Model information saved."))
     }
 
+    /// Loads a previously [`saved`](ModelArtifact::save) artifact back from `dir`, given the
+    /// same `snapshot_id`/`label` pair it was saved under.
+    ///
+    /// Reads the metadata file first to recover the model's [`ModelArchitecture`], then rebuilds
+    /// a same-shaped, untrained model from it (e.g. via [`candle_nn::linear()`]) before loading
+    /// the saved weights into it — `candle_nn::VarMap::load` only fills in *already-declared*
+    /// variables, it doesn't recreate the architecture that produced them. `device` chooses
+    /// where the loaded model's tensors live; it doesn't need to match the device used at
+    /// training time (the saved weights are plain numeric data, not tied to any device).
+    ///
+    /// Returns both the reconstructed [`LoadedModel`] and the [`ModelArtifact`] metadata itself
+    /// (read from the same file), so callers don't need to keep the original artifact around
+    /// separately just to inspect it again.
+    ///
+    /// # Errors
+    /// Returns [`ArtifactError::ArtifactFileOpenFailed`] if the metadata file doesn't exist,
+    /// [`ArtifactError::DeserializationFailed`] if it can't be parsed,
+    /// [`ArtifactError::ModelCreationFailed`] if rebuilding the untrained model fails, or
+    /// [`ArtifactError::WeightsLoadedFailed`] if reading the weights file fails.
     pub fn load(
         snapshot_id: &SnapshotId,
         label: &str,
