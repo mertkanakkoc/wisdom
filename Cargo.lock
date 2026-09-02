@@ -1410,6 +1410,8 @@ dependencies = [
  "candle-nn",
  "csv",
  "rand 0.10.2",
+ "serde",
+ "serde_json",
  "sha2",
  "tempfile",
 ]

@@ -1,1 +1,2 @@
-pub mod linear_reg;
+pub mod inference;
+pub mod training;

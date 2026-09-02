@@ -1,12 +1,10 @@
 mod drift;
 mod snapshot;
 
+pub use snapshot::{Snapshot, SnapshotId};
 use std::{collections::HashMap, time::SystemTime};
 
-use crate::{
-    feature_store::snapshot::{Snapshot, SnapshotId},
-    models::table::{ColumnData, TableError},
-};
+use crate::models::table::{ColumnData, TableError};
 
 /// Errors that can occur while creating or using a [`FeatureStore`].
 #[derive(Debug)]

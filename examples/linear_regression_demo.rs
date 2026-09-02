@@ -1,5 +1,5 @@
 use candle_core::Device;
-use wisdom::ml::linear_reg::train_linear_regression;
+use wisdom::ml::training::train_linear_regression;
 use wisdom::models::column::Column;
 use wisdom::models::table::Table;
 
@@ -28,7 +28,7 @@ fn main() -> candle_core::Result<()> {
     println!("x shape: {:?}", x.shape());
     println!("y shape: {:?}", y.shape());
 
-    let _model = train_linear_regression(&x, &y, 50, 0.1, &device)?;
+    let _training_output = train_linear_regression(&x, &y, 50, 0.1, &device)?;
     println!("Training finished.");
 
     Ok(())

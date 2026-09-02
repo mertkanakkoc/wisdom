@@ -161,6 +161,102 @@ impl Table {
         Ok((tensor_x, tensor_y))
     }
 
+    /// Converts the given columns into a single `candle` tensor of shape `(row_count,
+    /// feature_columns.len())`, without requiring (or producing) a target — unlike
+    /// [`Table::to_tensor`], which is built for training and always needs a known `y`.
+    ///
+    /// Intended for inference: scoring already-known data (e.g. reconstructed from a
+    /// [`FeatureStore`](crate::feature_store::FeatureStore) snapshot) or predicting from
+    /// brand-new, not-yet-committed values, in either case where the true target isn't
+    /// available to hand `to_tensor`. Values are read in `feature_columns`' order and cast to
+    /// `f32` (`Bool` becomes `1.0`/`0.0`); the underlying table is only borrowed, not consumed
+    /// or checked out.
+    ///
+    /// Every named column must already be materialized to `Int`/`Float`/`Bool` — a column still
+    /// sitting as [`ColumnData::Raw`] is rejected as [`TableError::NonNumericColumn`], same as
+    /// `to_tensor`.
+    ///
+    /// # Errors
+    /// Returns [`TableError::ColumnNotFound`] if any named column doesn't exist,
+    /// [`TableError::NonNumericColumn`] if any named column is `Text`/`Raw`,
+    /// [`TableError::MissingValuesPresent`] if any named column has a missing value, or
+    /// [`TableError::TensorCreationFailed`] if `candle` itself rejects the resulting data/shape.
+    pub fn to_feature_tensor(
+        &self,
+        feature_columns: Vec<String>,
+        device: &Device,
+    ) -> Result<Tensor, TableError> {
+        if let Err(e) = self.check_missing_and_type(&feature_columns) {
+            return Err(e);
+        }
+
+        let mut vec_for_tensor: Vec<f32> = vec![];
+        let mut columns_for_tensor: Vec<&ColumnData> = vec![];
+
+        for feature_name in feature_columns.iter() {
+            columns_for_tensor.push({
+                self.data
+                    .get(feature_name)
+                    .ok_or_else(|| TableError::ColumnNotFound {
+                        name: feature_name.clone(),
+                    })?
+            });
+        }
+
+        let row_count = self.row_count();
+        for i in 0..row_count {
+            for (index, name) in feature_columns.iter().enumerate() {
+                let from_table: &ColumnData = columns_for_tensor[index];
+                match from_table {
+                    ColumnData::Raw(_) | ColumnData::Text(_) => {
+                        return Err(TableError::NonNumericColumn { name: name.clone() });
+                    }
+                    ColumnData::Bool(column) => {
+                        vec_for_tensor.push(match column.get(i) {
+                            Some(Some(x)) => {
+                                if *x {
+                                    1.0_f32
+                                } else {
+                                    0.0_f32
+                                }
+                            }
+                            _ => {
+                                return Err(TableError::MissingValuesPresent {
+                                    name: name.clone(),
+                                });
+                            }
+                        });
+                    }
+                    ColumnData::Int(column) => {
+                        vec_for_tensor.push(match column.get(i) {
+                            Some(Some(x)) => *x as f32,
+                            _ => {
+                                return Err(TableError::MissingValuesPresent {
+                                    name: name.clone(),
+                                });
+                            }
+                        });
+                    }
+                    ColumnData::Float(column) => {
+                        vec_for_tensor.push(match column.get(i) {
+                            Some(Some(x)) => *x as f32,
+                            _ => {
+                                return Err(TableError::MissingValuesPresent {
+                                    name: name.clone(),
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
+        let feature_tensor =
+            Tensor::from_vec(vec_for_tensor, (row_count, feature_columns.len()), device)
+                .map_err(TableError::TensorCreationFailed)?;
+        Ok(feature_tensor)
+    }
+
     fn check_missing_and_type(&self, columns: &[String]) -> Result<(), TableError> {
         for name in columns.iter() {
             let from_table = self
@@ -313,6 +409,76 @@ mod tests {
             Err(TableError::MissingValuesPresent { name }) => {
                 assert_eq!(name, "age".to_string())
             }
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn to_feature_tensor_produces_correct_values() {
+        let file = write_temp_csv("age,score\n25,1.5\n30,2.5\n35,3.5\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        for name in ["age", "score"] {
+            let column = table.get_column::<f64>(name).unwrap();
+            table.update_column(name, column).unwrap();
+        }
+
+        let device = Device::Cpu;
+        let result = table.to_feature_tensor(vec!["age".to_string(), "score".to_string()], &device);
+
+        assert!(result.is_ok());
+        let tensor = result.unwrap();
+        let values = tensor.to_vec2::<f32>().unwrap();
+        assert_eq!(
+            values,
+            vec![vec![25.0, 1.5], vec![30.0, 2.5], vec![35.0, 3.5]]
+        );
+    }
+
+    #[test]
+    fn to_feature_tensor_fails_when_column_not_found() {
+        let file = write_temp_csv("age\n25\n30\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = table.get_column::<f64>("age").unwrap();
+        table.update_column("age", column).unwrap();
+
+        let device = Device::Cpu;
+        let result = table.to_feature_tensor(vec!["city".to_string()], &device);
+
+        match result {
+            Err(TableError::ColumnNotFound { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn to_feature_tensor_fails_for_non_numeric_column() {
+        let file = write_temp_csv("age,city\n25,Istanbul\n30,Ankara\n");
+        let table = Table::from_csv(file.path()).unwrap();
+
+        let device = Device::Cpu;
+        let result = table.to_feature_tensor(vec!["city".to_string()], &device);
+
+        match result {
+            Err(TableError::NonNumericColumn { name }) => assert_eq!(name, "city".to_string()),
+            _ => panic!("Unexpected result."),
+        }
+    }
+
+    #[test]
+    fn to_feature_tensor_fails_when_missing_values_present() {
+        let file = write_temp_csv("age,other\n25,1\n,2\n35,3\n");
+        let mut table = Table::from_csv(file.path()).unwrap();
+
+        let column = table.get_column::<f64>("age").unwrap();
+        table.update_column("age", column).unwrap();
+
+        let device = Device::Cpu;
+        let result = table.to_feature_tensor(vec!["age".to_string()], &device);
+
+        match result {
+            Err(TableError::MissingValuesPresent { name }) => assert_eq!(name, "age".to_string()),
             _ => panic!("Unexpected result."),
         }
     }

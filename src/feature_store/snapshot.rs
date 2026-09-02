@@ -1,5 +1,6 @@
 use std::time::SystemTime;
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -14,8 +15,17 @@ use super::FeatureStore;
 /// [`FeatureStore::create_snapshot`]). The same combination, given in the same order, always
 /// produces the same `SnapshotId`; a different order produces a different one, since feature
 /// order is significant for reconstructing the exact tensor layout a model was trained on.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SnapshotId(String);
+
+/// Displays as the raw hex digest itself (unlike `Debug`, which wraps it as
+/// `SnapshotId("...")`) — used, for example, as part of a filename in
+/// [`crate::ml::training::ModelArtifact::save`].
+impl std::fmt::Display for SnapshotId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 /// A named, ordered combination of feature versions — the "dataset version" a model is actually
 /// trained or served against, as opposed to [`ColumnVersion`]'s per-feature history.
